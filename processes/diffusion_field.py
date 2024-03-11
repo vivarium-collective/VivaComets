@@ -119,12 +119,14 @@ class DiffusionField(Process):
 
     def next_update(self, timestep, states):
         fields = states['fields']
+        print("Updating fields keys:", fields.keys()) 
         fields_new = copy.deepcopy(fields)
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             if np.var(field) > 0:  # If field is not uniform
                 fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate)
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
+        print("After update, fields keys:", fields.keys())
         return {'fields': delta_fields}
 
     def get_bin_site(self, location):
@@ -160,16 +162,18 @@ class DiffusionField(Process):
 
 #  3D test_field
 def test_fields():
-    total_time = 30
+    total_time = 5
     config = {
-        "bounds": [10, 10, 10],
-        "nbins": [10, 10, 10],
+        "bounds": [3, 3, 3],
+        "nbins": [3, 3, 3],
         "molecules": ["glucose", "oxygen"]
     }
     field = DiffusionField(config)
+    initial_state = field.initial_state({'random': 1.0})
+    print(initial_state)
 
     sim = Engine(
-        initial_state=field.initial_state({'random': 1.0}),
+        initial_state=initial_state,
         processes={'diffusion_process': field},
         topology={'diffusion_process': {
             'fields': ('fields',),
@@ -183,6 +187,8 @@ def test_fields():
 
     # Get the results
     data = sim.emitter.get_timeseries()
+    
+
     print(type(data['fields']['oxygen']))  # oxygen data type
     first_oxygen_data = data['fields']['oxygen'][0] if isinstance(data['fields']['oxygen'], list) else None
     print(type(first_oxygen_data))  # to see if its a list
