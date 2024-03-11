@@ -7,9 +7,7 @@ Diffuses and decays molecular concentrations in a 3D field.
 """
 
 import copy
-import cv2
 import numpy as np
-from scipy import constants
 from vivarium.core.serialize import Quantity
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
@@ -21,13 +19,11 @@ import matplotlib.pyplot as plt
 
 
 
+LAPLACIAN_3D = np.array([[[0, 0, 0],   [0, 1/6, 0],      [0, 0, 0]],
+                         [[0, 1/6, 0], [1/6, -6/6, 1/6], [0, 1/6, 0]],
+                         [[0, 0, 0],   [0, 1/6, 0],      [0, 0, 0]]])
 
-# laplacian kernel for diffusion
-LAPLACIAN_3D = np.array([[[0, 1, 0], [1, 1, 1], [0, 1, 0]],
-                         [[1, 1, 1], [1, -6, 1], [1, 1, 1]],
-                         [[0, 1, 0], [1, 1, 1], [0, 1, 0]]])
-
-def get_bin_site(location, n_bins, bounds):
+def get_bin_site(location, n_bins, bounds): #compute the relative position of the point within the bounds. 
     bin_site_no_rounding = np.array([
         location[0] * n_bins[0] / bounds[0], 
         location[1] * n_bins[1] / bounds[1],
@@ -42,15 +38,15 @@ def get_bin_volume(bin_size):
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [10, 10, 10],
+        'bounds': [10, 10, 10], # cm
         'nbins': [10, 10, 10],
         'molecules': ['glucose', 'oxygen'],
         'species': ["Alteromonas"],
         'default_diffusion_dt': 0.001,
-        'default_diffusion_rate': 1e-1,
+        'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
-            'glucose': 1E-1,
-            'oxygen': 1E0,
+            'glucose': 6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'oxygen': 2.0E-5,   # cm^2/s
         },
     }
 
@@ -60,12 +56,10 @@ class DiffusionField(Process):
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters["nbins"]
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
-
         diffusion_rate = self.parameters['default_diffusion_rate']
-        dx, dy, dz = self.bin_size
-        dx2_dy2_dz2 = dx * dy * dz
+        dx, dy, dz = self.bin_size  
+        dx2_dy2_dz2 = get_bin_volume(self.bin_size)
         self.diffusion_rate = diffusion_rate / dx2_dy2_dz2
-
         self.molecule_specific_diffusion = {
             mol_id: diff_rate / dx2_dy2_dz2
             for mol_id, diff_rate in self.parameters['diffusion'].items()
@@ -77,6 +71,15 @@ class DiffusionField(Process):
 
 
     def initial_state(self, config=None):
+        """get initial state of the fields
+
+        Args:
+            * config (dict): with optional keys "random" or "uniform".
+                * "random" key maps to a maximum value for the field, which gets filled with values between [0, max].
+                * "uniform" key maps to a value that will fill the entire field
+        Returns:
+            * fields (dict) with {mol_id: 3D np.array}
+        """
         if config is None:
             config = {}
         fields = {}
@@ -124,33 +127,11 @@ class DiffusionField(Process):
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
         return {'fields': delta_fields}
 
-
     def get_bin_site(self, location):
         return get_bin_site(
             [loc for loc in location],
             self.nbins,
             self.bounds)
-
-    def get_single_local_environments(self, specs, fields):  #retrieve the info of each bin in a dict
-        bin_site = self.get_bin_site(specs['location'])
-        local_environment = {}
-        for mol_id, field in fields.items():
-            local_environment[mol_id] = field[bin_site]
-        return local_environment
-
-    def set_local_environments(self, species_populations, fields):
-        local_environments = {}
-        if species_populations:
-            for species_id, specs in species_populations.items():
-                bin_site = self.get_bin_site(specs['location'])
-                local_environment = {}
-                for mol_id, field in fields.items():
-                    # Access the concentration of each molecule at the species location.
-                    local_environment[mol_id] = field[bin_site]
-                local_environments[species_id] = {
-                    'boundary': {'external': local_environment}
-                }
-        return local_environments
 
     def ones_field(self):
         return np.ones(self.nbins, dtype=np.float64)
@@ -162,7 +143,7 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            result = convolve(field, LAPLACIAN_3D, mode='constant', cval=0.0)
+            result = convolve(field, LAPLACIAN_3D, mode='constant', cval=0.0) #Now it works for 3D
             field += diffusion_rate * dt * result
             t += dt
         return field
@@ -177,73 +158,8 @@ class DiffusionField(Process):
         return fields
 
 
-
-def plot_fields(fields, out_dir='out', filename='fields'):
-    for mol_id, field_list in fields.items():
-        # Assuming the field data is the first element in the list
-        field = field_list[0] if isinstance(field_list, list) and len(field_list) > 0 else None
-        
-        if field is not None and hasattr(field, 'shape'):
-            fig = plt.figure(figsize=(10, 7))
-            ax = fig.add_subplot(111, projection='3d')
-            
-            # Select the middle slice along z-axis for simplicity
-            z_slice = field.shape[2] // 2
-            slice_2d = field[:, :, z_slice]
-            
-            # Create a meshgrid to plot surface
-            x, y = np.meshgrid(np.arange(slice_2d.shape[0]), np.arange(slice_2d.shape[1]))
-            ax.plot_surface(x, y, slice_2d.T, cmap='viridis')
-            
-            ax.set_title(f'{mol_id} concentration (slice at z={z_slice})')
-            ax.set_xlabel('X axis')
-            ax.set_ylabel('Y axis')
-            ax.set_zlabel('Concentration')
-            
-            plt.savefig(f"{out_dir}/{filename}_{mol_id}.png")
-            plt.close()
-        else:
-            print(f"Warning: Field data for '{mol_id}' is not in the expected format.")
-
-
-def plot_fields_temporal(fields_data, nth_timestep=5, out_dir='out', filename='fields_temporal'):
-    # Assuming fields_data is a list of lists where each inner list represents the field data for a timestep
-    if not fields_data or not isinstance(fields_data[0], list):
-        print("Unexpected or empty data structure in 'fields_data'.")
-        return
-
-    # Convert the first element to numpy array to check its dimensions
-    first_field = np.array(fields_data[0])
-    if len(first_field.shape) != 3:
-        print("Data does not have expected 3D structure.")
-        return
-    
-    num_timesteps = len(fields_data)
-    z_slice_index = first_field.shape[2] // 2  # Assuming we want the middle z-slice
-    
-    # Create subplots
-    num_plots = (num_timesteps + nth_timestep - 1) // nth_timestep
-    fig, axes = plt.subplots(1, num_plots, figsize=(20, 4))
-    
-    for i, timestep_data in enumerate(fields_data[::nth_timestep]):
-        field = np.array(timestep_data)
-        slice_2d = field[:, :, z_slice_index]
-        
-        ax = axes[i] if num_plots > 1 else axes  # Handle the case of a single subplot differently
-        cax = ax.imshow(slice_2d, cmap='viridis')
-        ax.set_title(f'Timestep {i * nth_timestep}')
-        fig.colorbar(cax, ax=ax)
-    
-    plt.suptitle(f'Concentration over time')
-    plt.savefig(f"{out_dir}/{filename}.png")
-    plt.close()
-
-
-
-
-# Example of how you could implement the test_fields function with 3D plotting
+#  3D test_field
 def test_fields():
-    # Example configuration for testing
     total_time = 30
     config = {
         "bounds": [10, 10, 10],
@@ -252,7 +168,6 @@ def test_fields():
     }
     field = DiffusionField(config)
 
-    # Initialize the simulation engine with the diffusion field process
     sim = Engine(
         initial_state=field.initial_state({'random': 1.0}),
         processes={'diffusion_process': field},
@@ -268,19 +183,17 @@ def test_fields():
 
     # Get the results
     data = sim.emitter.get_timeseries()
-    print(type(data['fields']['oxygen']))  # Check the type of the data for 'oxygen'
+    print(type(data['fields']['oxygen']))  # oxygen data type
     first_oxygen_data = data['fields']['oxygen'][0] if isinstance(data['fields']['oxygen'], list) else None
-    print(type(first_oxygen_data))  # Check the type of the first item if it's a list
+    print(type(first_oxygen_data))  # to see if its a list
     if isinstance(first_oxygen_data, np.ndarray):
-        print(first_oxygen_data.shape)  # If it's an ndarray, check its shape
-
-
+        print(first_oxygen_data.shape)  # check the shape
 
     # Plot the results
     first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
     plot_fields(first_fields, out_dir='out', filename='initial_fields')
 
-    plot_fields_temporal(data['fields'], nth_timestep=5, out_dir='out', filename='fields_over_time')
+    plot_fields_temporal(data['fields'],data['species'], nth_timestep=5, out_dir='out', filename='fields_over_time')
 
 if __name__ == '__main__':
     test_fields()

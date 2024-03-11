@@ -49,7 +49,7 @@ def plot_fields(fields_dict, out_dir=None, filename='fields'):
     return fig
 
 
-def plot_fields_temporal(fields_dict, nth_timestep=1, out_dir=None, filename='fields_temporal'):
+def plot_fields_temporal(fields_dict, species_dict, nth_timestep=1, out_dir=None, filename='fields_temporal'):
     # Determine the number of rows and columns for subplots
     num_fields = len(fields_dict)
     max_time_points = max(len(matrices) for matrices in fields_dict.values())
