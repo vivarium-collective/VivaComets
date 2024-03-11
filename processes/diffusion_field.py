@@ -45,7 +45,7 @@ class DiffusionField(Process):
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
-            'glucose': 6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'glucose':2.0E-5,    # 6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
             'oxygen': 2.0E-5,   # cm^2/s
         },
     }
@@ -119,7 +119,7 @@ class DiffusionField(Process):
 
     def next_update(self, timestep, states):
         fields = states['fields']
-        print("Updating fields keys:", fields.keys()) 
+        #print("We lost Glucose here",fields )
         fields_new = copy.deepcopy(fields)
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
@@ -170,7 +170,7 @@ def test_fields():
     }
     field = DiffusionField(config)
     initial_state = field.initial_state({'random': 1.0})
-    print(initial_state)
+    print("Immediate initial state check:", initial_state['fields'].keys())
 
     sim = Engine(
         initial_state=initial_state,
@@ -198,7 +198,6 @@ def test_fields():
     # Plot the results
     first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
     plot_fields(first_fields, out_dir='out', filename='initial_fields')
-
     plot_fields_temporal(data['fields'],data['species'], nth_timestep=5, out_dir='out', filename='fields_over_time')
 
 if __name__ == '__main__':
