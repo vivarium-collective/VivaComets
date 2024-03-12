@@ -39,8 +39,8 @@ def get_bin_volume(bin_size):
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [10, 10, 10], # cm
-        'nbins': [10, 10, 10],
+        'bounds': [3, 3, 3], # cm
+        'nbins': [3, 3, 3],
         'molecules': ['glucose', 'oxygen'],
         'species': ["Alteromonas"],
         'default_diffusion_dt': 0.001,
@@ -164,16 +164,13 @@ class DiffusionField(Process):
 
 
 def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
-    # Ensure the output directory exists
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
-
     z_index = z - 1
     num_molecules = len(fields_dict.keys())
     
     # Map desired time points to indices in the actual data
     time_indices = [actual_time_points.index(time) for time in desired_time_points if time in actual_time_points]
-
     num_times = len(time_indices)
     if num_molecules > 1 or num_times > 1:
         fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, num_times * 5), squeeze=False)
@@ -182,7 +179,6 @@ def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z
         axs = np.array([[axs]])  # Make sure axs is 2D for consistency
 
     molecule_names = list(fields_dict.keys())
-
     for i, time_idx in enumerate(time_indices):
         for j, molecule in enumerate(molecule_names):
             data_array = np.array(fields_dict[molecule][time_idx])
@@ -190,20 +186,31 @@ def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z
             ax = axs[i, j]
             cax = ax.imshow(data, cmap='viridis', interpolation='nearest')
             if i == 0:
-                ax.set_title(molecule)
-            ax.set_ylabel(f"Time {actual_time_points[time_idx]}")
-            fig.colorbar(cax, ax=ax)
+                ax.set_title(molecule, fontsize=24)  # Set the font size for titles
+            ax.set_ylabel(f"Time {actual_time_points[time_idx]}", fontsize=22)  # Set the font size for y-axis labels
 
+            ax.set_xticks(np.arange(data.shape[1]), minor=False)  # Adjust x-ticks
+            ax.set_yticks(np.arange(data.shape[0]), minor=False)  # Adjust y-ticks
+            ax.set_xticklabels(np.arange(1, data.shape[1]+1))  # Adjust x-tick labels
+            ax.set_yticklabels(np.arange(1, data.shape[0]+1)) 
+
+
+
+
+            ax.tick_params(axis='both', which='major', labelsize=20)  # Set the font size for tick labels
+            if j == num_molecules - 1 and i == 0:
+                cb = fig.colorbar(cax, ax=ax)
+                cb.ax.tick_params(labelsize=30)
     plt.tight_layout()
     plt.savefig(f"{out_dir}/{filename}.png")
 
 
 #  3D test_field
 def test_fields():
-    total_time = 6
+    total_time = 12
     config = {
-        "bounds": [10, 10, 10],
-        "nbins": [10, 10, 10],
+        "bounds": [3, 3, 3],
+        "nbins": [3, 3, 3],
         "molecules": ["glucose", "oxygen"]
     }
     field = DiffusionField(config)
@@ -227,10 +234,9 @@ def test_fields():
 
     # Plot the results
     first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
-    time_list=[0,1,2]
+    time_list=[0,1,2, 50, 100]
     # Inside test_fields function
     actual_time_points = data['time']  # Extract actual time points from data
-    time_list = [0, 1, 2]  # Desired time points to plot
     plot_fields_temporal(data['fields'], time_list, actual_time_points, z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out", filename='fields_over_time')
 
 
