@@ -12,11 +12,12 @@ from vivarium.core.serialize import Quantity
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 from scipy.ndimage import convolve
-from plots.field import plot_fields, plot_fields_temporal
+#from plots.field import plot_fields, plot_fields_temporal
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
-
+import matplotlib.gridspec as gridspec
+import os
 
 
 LAPLACIAN_3D = np.array([[[0, 0, 0],   [0, 1/6, 0],      [0, 0, 0]],
@@ -104,29 +105,30 @@ class DiffusionField(Process):
 
 
     def ports_schema(self):
-        schema = {}
+        schema = {
+            'species': {},
+            'fields': {}
+        }
         for species in self.parameters['species']:
-            schema['species'] = {
+            schema['species'].update({
                 species: {'_default': np.ones(self.nbins), '_updater': 'nonnegative_accumulate', '_emit': True}
-            }
+            })
         for mol in self.parameters['molecules']:
-            schema['fields'] = {
+            schema['fields'].update({
                 mol: {'_default': np.ones(self.nbins), '_updater': 'nonnegative_accumulate', '_emit': True}
-            }
+            })
         schema['dimensions'] = {'bounds': {'_value': self.bounds, '_updater': 'set', '_emit': True},
                                 'nbins': {'_value': self.nbins, '_updater': 'set', '_emit': True}}
         return schema
 
     def next_update(self, timestep, states):
         fields = states['fields']
-        #print("We lost Glucose here",fields )
         fields_new = copy.deepcopy(fields)
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             if np.var(field) > 0:  # If field is not uniform
                 fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate)
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
-        print("After update, fields keys:", fields.keys())
         return {'fields': delta_fields}
 
     def get_bin_site(self, location):
@@ -158,20 +160,54 @@ class DiffusionField(Process):
             if len(set(field.flatten())) != 1:  
                 fields[mol_id] = self.diffuse(field, timestep, diffusion_rate)
         return fields
+    
+
+
+def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
+    # Ensure the output directory exists
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+
+    z_index = z - 1
+    num_molecules = len(fields_dict.keys())
+    
+    # Map desired time points to indices in the actual data
+    time_indices = [actual_time_points.index(time) for time in desired_time_points if time in actual_time_points]
+
+    num_times = len(time_indices)
+    if num_molecules > 1 or num_times > 1:
+        fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, num_times * 5), squeeze=False)
+    else:
+        fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, 5))
+        axs = np.array([[axs]])  # Make sure axs is 2D for consistency
+
+    molecule_names = list(fields_dict.keys())
+
+    for i, time_idx in enumerate(time_indices):
+        for j, molecule in enumerate(molecule_names):
+            data_array = np.array(fields_dict[molecule][time_idx])
+            data = data_array[..., z_index]  # Use the numpy array here
+            ax = axs[i, j]
+            cax = ax.imshow(data, cmap='viridis', interpolation='nearest')
+            if i == 0:
+                ax.set_title(molecule)
+            ax.set_ylabel(f"Time {actual_time_points[time_idx]}")
+            fig.colorbar(cax, ax=ax)
+
+    plt.tight_layout()
+    plt.savefig(f"{out_dir}/{filename}.png")
 
 
 #  3D test_field
 def test_fields():
-    total_time = 5
+    total_time = 6
     config = {
-        "bounds": [3, 3, 3],
-        "nbins": [3, 3, 3],
+        "bounds": [10, 10, 10],
+        "nbins": [10, 10, 10],
         "molecules": ["glucose", "oxygen"]
     }
     field = DiffusionField(config)
     initial_state = field.initial_state({'random': 1.0})
-    print("Immediate initial state check:", initial_state['fields'].keys())
-
     sim = Engine(
         initial_state=initial_state,
         processes={'diffusion_process': field},
@@ -187,18 +223,16 @@ def test_fields():
 
     # Get the results
     data = sim.emitter.get_timeseries()
-    
-
-    print(type(data['fields']['oxygen']))  # oxygen data type
     first_oxygen_data = data['fields']['oxygen'][0] if isinstance(data['fields']['oxygen'], list) else None
-    print(type(first_oxygen_data))  # to see if its a list
-    if isinstance(first_oxygen_data, np.ndarray):
-        print(first_oxygen_data.shape)  # check the shape
 
     # Plot the results
     first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
-    plot_fields(first_fields, out_dir='out', filename='initial_fields')
-    plot_fields_temporal(data['fields'],data['species'], nth_timestep=5, out_dir='out', filename='fields_over_time')
+    time_list=[0,1,2]
+    # Inside test_fields function
+    actual_time_points = data['time']  # Extract actual time points from data
+    time_list = [0, 1, 2]  # Desired time points to plot
+    plot_fields_temporal(data['fields'], time_list, actual_time_points, z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out", filename='fields_over_time')
+
 
 if __name__ == '__main__':
     test_fields()
