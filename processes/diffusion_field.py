@@ -46,14 +46,13 @@ class DiffusionField(Process):
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
-            'glucose':2.0E-5,    # 6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'glucose': 1000E-2,  #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
             'oxygen': 2.0E-5,   # cm^2/s
         },
     }
 
     def __init__(self, parameters=None):
         super().__init__(parameters)
-        self.timestep_counter = 0 
         self.molecule_ids = self.parameters['molecules']
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters["nbins"]
@@ -108,7 +107,12 @@ class DiffusionField(Process):
     def ports_schema(self):
         schema = {
             'species': {},
-            'fields': {}
+            'fields': {},
+            'cubic_dict': {
+                '_default': {},  
+                '_updater': 'set',  
+                '_emit': True, 
+            }
         }
         for species in self.parameters['species']:
             schema['species'].update({
@@ -118,40 +122,31 @@ class DiffusionField(Process):
             schema['fields'].update({
                 mol: {'_default': np.ones(self.nbins), '_updater': 'nonnegative_accumulate', '_emit': True}
             })
-        schema['dimensions'] = {'bounds': {'_value': self.bounds, '_updater': 'set', '_emit': True},
-                                'nbins': {'_value': self.nbins, '_updater': 'set', '_emit': True}}
+        schema['dimensions'] = {
+            'bounds': {'_value': self.bounds, '_updater': 'set', '_emit': True},
+            'nbins': {'_value': self.nbins, '_updater': 'set', '_emit': True}
+        }
         return schema
+
 
     def next_update(self, timestep, states):
         fields = states['fields']
         cubic_dict = {} 
         fields_new = copy.deepcopy(fields)
-        current_timestep = self.timestep_counter
-        self.cubic_dict[current_timestep] = {}
+
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             if np.var(field) > 0:  # If field is not uniform
                 fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate)
-        # Update cubic_dict 
-        for x in range(self.nbins[0]):
-            for y in range(self.nbins[1]):
-                for z in range(self.nbins[2]):
-                    cubic_address = (x, y, z)
-                    oxygen_level = fields_new['oxygen'][x, y, z]
-                    glucose_level = fields_new['glucose'][x, y, z]
-                    self.cubic_dict[current_timestep][cubic_address] = {
-                        'oxygen': oxygen_level,
-                        'glucose': glucose_level,
-                        'biomass': 'NA'  # Assuming biomass remains 'NA' for now
-                    }
+        
+                
 
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
         
-        self.timestep_counter += 1
-        return {'fields': delta_fields}, cubic_dict
+        
+        return {'fields': delta_fields}
         
      
-
     def get_bin_site(self, location):
         return get_bin_site(
             [loc for loc in location],
@@ -182,12 +177,12 @@ class DiffusionField(Process):
                 fields[mol_id] = self.diffuse(field, timestep, diffusion_rate)
         return fields
     
-def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
+def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points , z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     z_index = z - 1
     num_molecules = len(fields_dict.keys())
-    
+ 
     # Map desired time points to indices in the actual data
     time_indices = [actual_time_points.index(time) for time in desired_time_points if time in actual_time_points]
     num_times = len(time_indices)
@@ -200,15 +195,15 @@ def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z
     for i, time_idx in enumerate(time_indices):
         for j, molecule in enumerate(molecule_names):
             data_array = np.array(fields_dict[molecule][time_idx])
-            data = data_array[..., z_index]  # Use the numpy array here
+            data = data_array[..., z_index]  
             ax = axs[i, j]
             cax = ax.imshow(data, cmap='viridis', interpolation='nearest')
             if i == 0:
                 ax.set_title(molecule, fontsize=24)  
             ax.set_ylabel(f"Time {actual_time_points[time_idx]}", fontsize=22)  
             ax.set_xticks(np.arange(data.shape[1]), minor=False) 
-            ax.set_yticks(np.arange(data.shape[0]), minor=False)  # Adjust y-ticks
-            ax.set_xticklabels(np.arange(1, data.shape[1]+1))  # Adjust x-tick labels
+            ax.set_yticks(np.arange(data.shape[0]), minor=False)  
+            ax.set_xticklabels(np.arange(1, data.shape[1]+1))  
             ax.set_yticklabels(np.arange(1, data.shape[0]+1)) 
             ax.tick_params(axis='both', which='major', labelsize=20)  
             if j == num_molecules - 1 and i == 0:
@@ -217,6 +212,66 @@ def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points, z
     plt.tight_layout()
     plt.savefig(f"{out_dir}/{filename}.png")
 
+class Spatial_FBA(Process):
+    defaults = {
+        'bounds': [3, 3, 3], # cm
+        'nbins': [3, 3, 3],
+        'molecules': ['glucose', 'oxygen'],
+        'species': {"Alteromonas": "/Users/amin/Desktop/VivaComet/data/Alteromonas_Model.xml",
+                     "ecoli": "/Users/amin/Desktop/VivaComet/data/e_coli_core.xml" } 
+    }
+     
+    def __init__(self, parameters=None):
+        super().__init__(parameters)
+        self.molecule_ids = self.parameters['molecules']
+        self.bounds = self.parameters['bounds']
+        self.nbins = self.parameters["nbins"]
+        self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
+        self.bin_volume = get_bin_volume(self.bin_size)
+        #load FBA models
+        self.models = {}
+
+        for species, modelpath in self.parameters["species"].items():
+            self.models[species] = read_sbml_model(modelpath)
+
+    #TODO Species and fields similar to diffusion class
+    def ports_schema(self):
+        return {
+            'cubic_dict': {
+                '_default': {},
+                '_updater': 'set',
+            },
+        }
+
+    def next_update(self, timestep, states):
+
+
+
+        species = states["species"]
+        fields = states["fields"]
+        updated_biomass = {species_id : np.zeros(self.nbins) for species_id in species.keys() }
+        updated_fields = {field_id : np.zeros(self.nbins) for field_id in fields.keys()}
+        
+        # go to each small cubic and compute FBA for each species
+        for species_id, species_array in species.items():
+            for x in range(self.nbins[0]):
+                for y in range(self.nbins[1]):
+                    for z in range(self.nbins[2]):
+                        local_fields = {field_id : field_array[x,y,z] for field_id, field_array in fields.items() }
+                        species_biomass = species_array[x,y,z]
+                        species_model = self.models[species_id]
+                        #TODO make this more generic, dont hardcode names.
+                        species_model.reactions.get_by_id('EX_glc__D_e').lower_bound = -local_fields['glucose'] # TODO make sure the units are compatible
+                        species_model.reactions.get_by_id('EX_o2_e').lower_bound = -local_fields['oxygen'] 
+                        solution = species_model.optimize()
+                        objective_flux = solution.objective_value
+                        updated_biomass[species_id][x,y,z] += objective_flux 
+
+                        #TODO from the objective flux we need to get 
+                        #TODO go through exchange fluxes in the field and remove it from the environment
+                        #calculate FBA for this species in this location
+        return {'species': updated_biomass , "fields": updated_fields}
+   
 
 #  3D test_field
 def test_fields():
@@ -238,6 +293,8 @@ def test_fields():
         }}
     )
 
+
+
     # Run the simulation
     sim.update(total_time)
 
@@ -249,9 +306,20 @@ def test_fields():
     first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
     time_list=[0,1,2, 50, 100]
     # Inside test_fields function
-    actual_time_points = data['time']  # Extract actual time points from data
-    plot_fields_temporal(data['fields'], time_list, actual_time_points, z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out", filename='fields_over_time')
-    print(field.cubic_dict[0]keys())
+    
+    plot_fields_temporal(fields_dict=data['fields'],
+                          desired_time_points=time_list, 
+                          actual_time_points=data["time"], 
+                          z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out", 
+                          filename='fields_over_time')
+
+
+
+def test_fba():
+    #TODO make the test run fba on its own
+    pass
+
 
 if __name__ == '__main__':
     test_fields()
+    test_fba()
