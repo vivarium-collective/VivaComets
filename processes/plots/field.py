@@ -83,3 +83,6 @@ def plot_fields_temporal(fields_dict, nth_timestep=1, out_dir=None, filename='fi
     else:
         plt.show()
     return fig
+
+ 
+

@@ -39,15 +39,15 @@ def get_bin_volume(bin_size):
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [3, 3, 3], # cm
+        'bounds': [30, 30, 30], # cm
         'nbins': [3, 3, 3],
         'molecules': ['glucose', 'oxygen'],
         'species': ["Alteromonas"],
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
-            'glucose': 1000E-2,  #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
-            'oxygen': 2.0E-5,   # cm^2/s
+            'glucose': 6.7E-2,        #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'oxygen':  2.0E-5,   # cm^2/s
         },
     }
 
@@ -131,21 +131,14 @@ class DiffusionField(Process):
 
     def next_update(self, timestep, states):
         fields = states['fields']
-        cubic_dict = {} 
+        #cubic_dict = {} 
         fields_new = copy.deepcopy(fields)
-
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             if np.var(field) > 0:  # If field is not uniform
                 fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate)
-        
-                
-
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
-        
-        
         return {'fields': delta_fields}
-        
      
     def get_bin_site(self, location):
         return get_bin_site(
@@ -177,40 +170,56 @@ class DiffusionField(Process):
                 fields[mol_id] = self.diffuse(field, timestep, diffusion_rate)
         return fields
     
-def plot_fields_temporal(fields_dict, desired_time_points, actual_time_points , z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
+def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z=2,
+                         out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     z_index = z - 1
-    num_molecules = len(fields_dict.keys())
- 
-    # Map desired time points to indices in the actual data
-    time_indices = [actual_time_points.index(time) for time in desired_time_points if time in actual_time_points]
-    num_times = len(time_indices)
-    if num_molecules > 1 or num_times > 1:
-        fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, num_times * 5), squeeze=False)
-    else:
-        fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, 5))
-        axs = np.array([[axs]])  # Make sure axs is 2D for consistency
-    molecule_names = list(fields_dict.keys())
-    for i, time_idx in enumerate(time_indices):
-        for j, molecule in enumerate(molecule_names):
-            data_array = np.array(fields_dict[molecule][time_idx])
-            data = data_array[..., z_index]  
-            ax = axs[i, j]
-            cax = ax.imshow(data, cmap='viridis', interpolation='nearest')
-            if i == 0:
-                ax.set_title(molecule, fontsize=24)  
-            ax.set_ylabel(f"Time {actual_time_points[time_idx]}", fontsize=22)  
-            ax.set_xticks(np.arange(data.shape[1]), minor=False) 
-            ax.set_yticks(np.arange(data.shape[0]), minor=False)  
-            ax.set_xticklabels(np.arange(1, data.shape[1]+1))  
-            ax.set_yticklabels(np.arange(1, data.shape[0]+1)) 
-            ax.tick_params(axis='both', which='major', labelsize=20)  
-            if j == num_molecules - 1 and i == 0:
-                cb = fig.colorbar(cax, ax=ax)
-                cb.ax.tick_params(labelsize=30)
+
+    # Convert desired and actual time points to float for accurate indexing
+    desired_time_points = [float(time) for time in desired_time_points]
+    actual_time_points = [float(time) for time in actual_time_points]
+    num_molecules = len(fields_data)
+    num_times = len(desired_time_points)
+    fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, num_times * 5), squeeze=False)
+    if num_molecules == 1 or num_times == 1:
+        axs = np.array([[axs]])
+
+    # Define a colormap for each molecule
+    molecule_colormaps = {
+        'glucose': 'Blues',
+        'oxygen': 'Greens',
+        # Add more mappings as needed
+    }
+
+    for mol_idx, molecule in enumerate(fields_data.keys()):
+        times_data = fields_data[molecule]
+        for time_idx, desired_time in enumerate(desired_time_points):
+            if desired_time in actual_time_points:
+                actual_idx = actual_time_points.index(desired_time)
+                data_array = np.array(times_data[actual_idx])  # Accessing the time-specific data
+                data = data_array[..., z_index]
+                ax = axs[time_idx, mol_idx]
+                # Use the specified colormap for the molecule
+                cmap = molecule_colormaps.get(molecule, 'viridis')  # Default to 'viridis' if molecule not in dict
+                cax = ax.imshow(data, cmap=cmap, interpolation='nearest')
+                if time_idx == 0:
+                    ax.set_title(molecule, fontsize=24)
+                ax.set_ylabel(f"Time {desired_time}", fontsize=22)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                if time_idx == 0:
+                    cb = fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
+                    cb.ax.tick_params(labelsize=10)
+
+                
     plt.tight_layout()
     plt.savefig(f"{out_dir}/{filename}.png")
+    plt.close()
+
+
+
+
 
 class Spatial_FBA(Process):
     defaults = {
@@ -230,7 +239,6 @@ class Spatial_FBA(Process):
         self.bin_volume = get_bin_volume(self.bin_size)
         #load FBA models
         self.models = {}
-
         for species, modelpath in self.parameters["species"].items():
             self.models[species] = read_sbml_model(modelpath)
 
@@ -244,9 +252,6 @@ class Spatial_FBA(Process):
         }
 
     def next_update(self, timestep, states):
-
-
-
         species = states["species"]
         fields = states["fields"]
         updated_biomass = {species_id : np.zeros(self.nbins) for species_id in species.keys() }
@@ -275,7 +280,7 @@ class Spatial_FBA(Process):
 
 #  3D test_field
 def test_fields():
-    total_time = 12
+    total_time = 1000
     config = {
         "bounds": [10, 10, 10],
         "nbins": [10, 10, 10],
@@ -304,21 +309,22 @@ def test_fields():
 
     # Plot the results
     first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
-    time_list=[0,1,2, 50, 100]
+    time_list=[0,1,5, 50, 100, 1000]
     # Inside test_fields function
     
-    plot_fields_temporal(fields_dict=data['fields'],
-                          desired_time_points=time_list, 
-                          actual_time_points=data["time"], 
-                          z=5, out_dir="/Users/amin/Desktop/VivaComet/processes/out", 
-                          filename='fields_over_time')
+    plot_fields_temporal(fields_data=data['fields'],
+                     desired_time_points=time_list, 
+                     actual_time_points=data["time"], 
+                     z=2, 
+                     out_dir="/Users/amin/Desktop/VivaComet/processes/out", 
+                     filename='fields_over_time')
+
 
 
 
 def test_fba():
     #TODO make the test run fba on its own
     pass
-
 
 if __name__ == '__main__':
     test_fields()
