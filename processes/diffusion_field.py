@@ -46,7 +46,7 @@ class DiffusionField(Process):
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
-            'glucose': 6.7E-2,        #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'glucose': 6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
             'oxygen':  2.0E-5,   # cm^2/s
         },
     }
@@ -131,7 +131,6 @@ class DiffusionField(Process):
 
     def next_update(self, timestep, states):
         fields = states['fields']
-        #cubic_dict = {} 
         fields_new = copy.deepcopy(fields)
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
@@ -189,7 +188,6 @@ def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z
     molecule_colormaps = {
         'glucose': 'Blues',
         'oxygen': 'Greens',
-        # Add more mappings as needed
     }
 
     for mol_idx, molecule in enumerate(fields_data.keys()):
@@ -218,9 +216,6 @@ def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z
     plt.close()
 
 
-
-
-
 class Spatial_FBA(Process):
     defaults = {
         'bounds': [3, 3, 3], # cm
@@ -240,11 +235,12 @@ class Spatial_FBA(Process):
         #load FBA models
         self.models = {}
         for species, modelpath in self.parameters["species"].items():
-            self.models[species] = read_sbml_model(modelpath)
+            self.models[species] = read_sbml_model(self.parameters['model_file'])
 
-    #TODO Species and fields similar to diffusion class
     def ports_schema(self):
         return {
+            'species': {},
+            'fields': {},
             'cubic_dict': {
                 '_default': {},
                 '_updater': 'set',
@@ -297,21 +293,12 @@ def test_fields():
             'dimensions': ('dimensions',),
         }}
     )
-
-
-
     # Run the simulation
     sim.update(total_time)
-
     # Get the results
     data = sim.emitter.get_timeseries()
-    first_oxygen_data = data['fields']['oxygen'][0] if isinstance(data['fields']['oxygen'], list) else None
-
-    # Plot the results
-    first_fields = {key: matrix[0] for key, matrix in data['fields'].items()}
     time_list=[0,1,5, 50, 100, 1000]
     # Inside test_fields function
-    
     plot_fields_temporal(fields_data=data['fields'],
                      desired_time_points=time_list, 
                      actual_time_points=data["time"], 
@@ -322,9 +309,45 @@ def test_fields():
 
 
 
+
 def test_fba():
-    #TODO make the test run fba on its own
-    pass
+    # Configuration for the spatial environment and simulation
+    total_time = 2
+    config = {
+        "bounds": [3, 3, 3],  
+        "nbins": [3, 3, 3],  
+        "molecules": ["glucose"],  
+        "species": {
+            "Alteromonas": "/Users/amin/Desktop/VivaComet/data/Alteromonas_Model.xml",  
+        }  
+    }
+
+    fba_process = Spatial_FBA(config)
+
+    # Define the initial state with some initial concentrations for the molecules
+    initial_state = {
+        'fields': {
+            'glucose': np.full((3, 3, 3), 5.0),  # Initial glucose concentration in each bin
+          
+        },
+        'species': {
+            "Alteromonas": np.full((3, 3, 3), 1.0),  # Initial biomass for Alteromonas in each bin
+        }
+    }
+
+    sim = Engine(
+        initial_state=initial_state,
+        processes={'fba_process': fba_process},
+        topology={'fba_process': {
+            'fields': ('fields',),
+            'species': ('species',),
+            'cubic_dict': ('cubic_dict',)  
+        }}
+    )
+
+    sim.update(total_time)
+    data = sim.emitter.get_timeseries()
+
 
 if __name__ == '__main__':
     test_fields()
