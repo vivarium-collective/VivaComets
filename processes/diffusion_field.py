@@ -20,10 +20,6 @@ import matplotlib.gridspec as gridspec
 import os
 
 
-LAPLACIAN_3D = np.array([[[0, 0, 0],   [0, 1/6, 0],      [0, 0, 0]],
-                         [[0, 1/6, 0], [1/6, -6/6, 1/6], [0, 1/6, 0]],
-                         [[0, 0, 0],   [0, 1/6, 0],      [0, 0, 0]]])
-
 def get_bin_site(location, n_bins, bounds): #compute the relative position of the point within the bounds. 
     bin_site_no_rounding = np.array([
         location[0] * n_bins[0] / bounds[0], 
@@ -46,8 +42,8 @@ class DiffusionField(Process):
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
-            'glucose': 6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
-            'oxygen':  2.0E-5,   # cm^2/s
+            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'oxygen':  6.7E-1 #2.0E-5,   # cm^2/s
         },
     }
 
@@ -108,11 +104,6 @@ class DiffusionField(Process):
         schema = {
             'species': {},
             'fields': {},
-            'cubic_dict': {
-                '_default': {},  
-                '_updater': 'set',  
-                '_emit': True, 
-            }
         }
         for species in self.parameters['species']:
             schema['species'].update({
@@ -152,13 +143,25 @@ class DiffusionField(Process):
         return np.random.rand(*self.nbins)
 
     def diffuse(self, field, timestep, diffusion_rate):
+        if field.ndim == 1:
+            laplacian_kernel = np.array([1, -2, 1])
+        elif field.ndim == 2:
+            laplacian_kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]])
+        elif field.ndim == 3:
+            laplacian_kernel = np.array([[[0, 0, 0], [0, 1, 0], [0, 0, 0]],
+                                            [[0, 1, 0], [1, -6, 1], [0, 1, 0]],
+                                            [[0, 0, 0], [0, 1, 0], [0, 0, 0]]])
+        else:
+            raise ValueError("Field must be 1D, 2D, or 3D")
+    
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            result = convolve(field, LAPLACIAN_3D, mode='constant', cval=0.0) #Now it works for 3D
-            field += diffusion_rate * dt * result
+            result = convolve(field, laplacian_kernel, mode='reflect') #TODO make it work for different dimentions TODO also test it in different conditions
+            field += diffusion_rate * dt * result  #mode constant cval=0.0 ,try reflect
             t += dt
         return field
+    
 
     def diffuse_fields(self, fields, timestep):  #actual computing of diffusing of each molecule 
         """ diffuse fields in a fields dictionary """
@@ -236,10 +239,15 @@ class Spatial_FBA(Process):
         self.models = {}
         for species, modelpath in self.parameters["species"].items():
             self.models[species] = read_sbml_model(self.parameters['model_file'])
+            #extract exchange fluxes self.externalmetabolite it should be a list. 
+            #make a name dictionry for exchange fluxes
 
     def ports_schema(self):
-        return {
-            'species': {},
+        return {  #goes to each species just like diffussion proccess. 
+        #     for species in self.parameters['species']:
+        #     schema['species'].update({
+        #         species: {'_default': np.ones(self.nbins), '_updater': 'nonnegative_accumulate', '_emit': True}
+        #     },
             'fields': {},
             'cubic_dict': {
                 '_default': {},
@@ -279,7 +287,7 @@ def test_fields():
     total_time = 1000
     config = {
         "bounds": [10, 10, 10],
-        "nbins": [10, 10, 10],
+        "nbins": [20, 20, 20],
         "molecules": ["glucose", "oxygen"]
     }
     field = DiffusionField(config)
@@ -310,40 +318,40 @@ def test_fields():
 
 
 
-def test_fba():
-    # Configuration for the spatial environment and simulation
-    total_time = 2
-    config = {
-        "bounds": [3, 3, 3],  
-        "nbins": [3, 3, 3],  
-        "molecules": ["glucose"],  
-        "species": {
-            "Alteromonas": "/Users/amin/Desktop/VivaComet/data/Alteromonas_Model.xml",  
-        }  
-    }
+# def test_fba():
+#     # Configuration for the spatial environment and simulation
+#     total_time = 2
+#     config = {
+#         "bounds": [3, 3, 3],  
+#         "nbins": [3, 3, 3],  
+#         "molecules": ["glucose"],  
+#         "species": {
+#             "Alteromonas": "/Users/amin/Desktop/VivaComet/data/Alteromonas_Model.xml",  
+#         }  
+#     }
 
-    fba_process = Spatial_FBA(config)
+#     fba_process = Spatial_FBA(config)
 
-    # Define the initial state with some initial concentrations for the molecules
-    initial_state = {
-        'fields': {
-            'glucose': np.full((3, 3, 3), 5.0),  # Initial glucose concentration in each bin
+#     # initial state 
+#     initial_state = {
+#         'fields': {
+#             'glucose': np.full((3, 3, 3), 5.0),  
           
-        },
-        'species': {
-            "Alteromonas": np.full((3, 3, 3), 1.0),  # Initial biomass for Alteromonas in each bin
-        }
-    }
+#         },
+#         'species': {
+#             "Alteromonas": np.full((3, 3, 3), 1.0),  
+#         }
+#     }
 
-    sim = Engine(
-        initial_state=initial_state,
-        processes={'fba_process': fba_process},
-        topology={'fba_process': {
-            'fields': ('fields',),
-            'species': ('species',),
-            'cubic_dict': ('cubic_dict',)  
-        }}
-    )
+#     sim = Engine(
+#         initial_state=initial_state,
+#         processes={'fba_process': fba_process},
+#         topology={'fba_process': {
+#             'fields': ('fields',),
+#             'species': ('species',),
+#             'cubic_dict': ('cubic_dict',)  
+#         }}
+#     )
 
     sim.update(total_time)
     data = sim.emitter.get_timeseries()
@@ -351,4 +359,4 @@ def test_fba():
 
 if __name__ == '__main__':
     test_fields()
-    test_fba()
+    #test_fba()
