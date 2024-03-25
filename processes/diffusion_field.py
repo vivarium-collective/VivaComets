@@ -35,15 +35,15 @@ def get_bin_volume(bin_size):
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [30, 30, 30], # cm
-        'nbins': [3, 3, 3],
+        'bounds': [10, 10, 10], # cm
+        'nbins': [10, 10, 10],
         'molecules': ['glucose', 'oxygen'],
         'species': ["Alteromonas"],
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
             'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
-            'oxygen':  6.7E-1 #2.0E-5,   # cm^2/s
+            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s
         },
     }
 
@@ -153,7 +153,6 @@ class DiffusionField(Process):
                                             [[0, 0, 0], [0, 1, 0], [0, 0, 0]]])
         else:
             raise ValueError("Field must be 1D, 2D, or 3D")
-    
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
@@ -171,6 +170,7 @@ class DiffusionField(Process):
             if len(set(field.flatten())) != 1:  
                 fields[mol_id] = self.diffuse(field, timestep, diffusion_rate)
         return fields
+    
     
 def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z=2,
                          out_dir="/Users/amin/Desktop/VivaComet/processes/out/", filename='fields_at_z'):
@@ -193,6 +193,12 @@ def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z
         'oxygen': 'Greens',
     }
 
+    # Calculate global min/max for each molecule across all timepoints
+    global_min_max = {}
+    for molecule in fields_data.keys():
+        all_data = np.concatenate([np.array(times_data) for times_data in fields_data[molecule]], axis=0)
+        global_min_max[molecule] = (np.min(all_data), np.max(all_data))
+
     for mol_idx, molecule in enumerate(fields_data.keys()):
         times_data = fields_data[molecule]
         for time_idx, desired_time in enumerate(desired_time_points):
@@ -203,7 +209,8 @@ def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z
                 ax = axs[time_idx, mol_idx]
                 # Use the specified colormap for the molecule
                 cmap = molecule_colormaps.get(molecule, 'viridis')  # Default to 'viridis' if molecule not in dict
-                cax = ax.imshow(data, cmap=cmap, interpolation='nearest')
+                vmin, vmax = global_min_max[molecule]  # Use global min/max
+                cax = ax.imshow(data, cmap=cmap, interpolation='nearest',  vmin=vmin, vmax=vmax)
                 if time_idx == 0:
                     ax.set_title(molecule, fontsize=24)
                 ax.set_ylabel(f"Time {desired_time}", fontsize=22)
@@ -212,11 +219,11 @@ def plot_fields_temporal(fields_data, desired_time_points, actual_time_points, z
                 if time_idx == 0:
                     cb = fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
                     cb.ax.tick_params(labelsize=10)
-
                 
     plt.tight_layout()
     plt.savefig(f"{out_dir}/{filename}.png")
     plt.close()
+
 
 
 class Spatial_FBA(Process):
@@ -284,10 +291,10 @@ class Spatial_FBA(Process):
 
 #  3D test_field
 def test_fields():
-    total_time = 1000
+    total_time = 6
     config = {
-        "bounds": [10, 10, 10],
-        "nbins": [20, 20, 20],
+        "bounds": [3, 3, 3],
+        "nbins": [3, 3,3],
         "molecules": ["glucose", "oxygen"]
     }
     field = DiffusionField(config)
