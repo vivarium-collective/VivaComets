@@ -1,6 +1,9 @@
+from typing import Optional
+
 import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
+from vivarium.core.types import State
 
 from processes.diffusion_field import get_bin_volume, plot_fields_temporal
 
@@ -16,14 +19,17 @@ class SpatialDFBA(Process):
             'oxygen'
         ],
         'species': {
-            'Alteromonas': '/Users/amin/Desktop/VivaComet/data/Alteromonas_Model.xml',
-            'ecoli': '/Users/amin/Desktop/VivaComet/data/e_coli_core.xml'
+            'Alteromonas': '../data/Alteromonas_Model.xml',
+            'ecoli': '../data/e_coli_core.xml'
         }
     }
 
     def __init__(self, parameters=None):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
+        self.species_ids = self.parameters['species']
+
+        # spatial settings
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
@@ -31,10 +37,32 @@ class SpatialDFBA(Process):
 
         # load FBA models
         self.models = {}
-        for species, modelpath in self.parameters['species'].items():
-            self.models[species] = read_sbml_model(self.parameters['model_file'])
+        for species, model_path in self.parameters['species'].items():
+            self.models[species] = read_sbml_model(model_path)
             #extract exchange fluxes self.externalmetabolite it should be a list.
             #make a name dictionry for exchange fluxes
+
+    def initial_state(self, config=None):
+
+        # update fields and species with initial values from config
+        fields = {molecule: 0.0 for molecule in self.molecule_ids}
+        species = {species: 0.0 for species in self.species_ids}
+        fields.update(config.get('fields', {}))
+        species.update(config.get('species', {}))
+
+        initial_state = {
+            'fields': {
+                molecule: np.ones(self.nbins) * concentration
+                for molecule, concentration in fields.items()
+                if molecule in self.molecule_ids
+            },
+            'species': {
+                species: np.ones(self.nbins) * biomass
+                for species, biomass in species.items()
+                if species in self.species_ids
+            }
+        }
+        return initial_state
 
     def ports_schema(self):
         schema = {
@@ -108,22 +136,21 @@ def test_spatial_dfba():
         'nbins': [3, 3, 3],
         'molecules': ['glucose'],
         'species': {
-            'Alteromonas': '/Users/amin/Desktop/VivaComet/data/Alteromonas_Model.xml',
+            'Alteromonas': '../data/Alteromonas_Model.xml',
         }
     }
 
     fba_process = SpatialDFBA(config)
 
     # initial state
-    initial_state = {
+    initial_state = fba_process.initial_state({
         'fields': {
-            'glucose': np.full((3, 3, 3), 5.0),
-
+            'glucose': 5.0
         },
         'species': {
-            'Alteromonas': np.full((3, 3, 3), 1.0),
+            'Alteromonas': 1.0
         }
-    }
+    })
 
     sim = Engine(
         initial_state=initial_state,
@@ -131,6 +158,7 @@ def test_spatial_dfba():
         topology={'fba_process': {
             'fields': ('fields',),
             'species': ('species',),
+            'dimensions': ('dimensions',),
         }}
     )
 
