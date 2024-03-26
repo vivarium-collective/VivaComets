@@ -6,9 +6,7 @@ Spatial DFBA
 import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
-
-from processes.diffusion_field import get_bin_volume, plot_fields_temporal
-
+from diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
 
 
