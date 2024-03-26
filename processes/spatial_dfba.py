@@ -1,9 +1,11 @@
-from typing import Optional
-
+"""
+============
+Spatial DFBA
+============
+"""
 import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
-from vivarium.core.types import State
 
 from processes.diffusion_field import get_bin_volume, plot_fields_temporal
 
@@ -11,6 +13,17 @@ from cobra.io import read_sbml_model
 
 
 class SpatialDFBA(Process):
+    """
+    SpatialDFBA
+
+    This process simulates the growth of multiple species in a spatial environment.
+
+    config:
+    - bounds: the size of the environment in each dimension
+    - nbins: the number of bins in each dimension
+    - molecules: the list of molecules in the environment
+    - species: a dictionary of species names and paths to their FBA models
+    """
     defaults = {
         'bounds': [3, 3, 3],  # cm
         'nbins': [3, 3, 3],
@@ -101,20 +114,37 @@ class SpatialDFBA(Process):
     def next_update(self, timestep, states):
         species = states['species']
         fields = states['fields']
-        updated_biomass = {species_id : np.zeros(self.nbins) for species_id in species.keys() }
-        updated_fields = {field_id : np.zeros(self.nbins) for field_id in fields.keys()}
+        updated_biomass = {
+            species_id: np.zeros(self.nbins)
+            for species_id in species.keys()}
+        updated_fields = {
+            field_id: np.zeros(self.nbins)
+            for field_id in fields.keys()}
 
         # go to each small cubic and compute FBA for each species
         for species_id, species_array in species.items():
+            # get the model for this species
+            species_model = self.models[species_id]
+
+            # go through each position
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
                     for z in range(self.nbins[2]):
-                        local_fields = {field_id : field_array[x,y,z] for field_id, field_array in fields.items() }
+
+                        # get all the fields for this location
+                        local_fields = {
+                            field_id: field_array[x,y,z]
+                            for field_id, field_array in fields.items()}
+
+                        # get the species at this position
                         species_biomass = species_array[x,y,z]
-                        species_model = self.models[species_id]
+
+                        # adjust model with constraints from the environment
                         #TODO make this more generic, dont hardcode names.
                         species_model.reactions.get_by_id('EX_glc__D_e').lower_bound = -local_fields['glucose'] # TODO make sure the units are compatible
                         species_model.reactions.get_by_id('EX_o2_e').lower_bound = -local_fields['oxygen']
+
+                        # run FBA
                         solution = species_model.optimize()
                         objective_flux = solution.objective_value
                         updated_biomass[species_id][x,y,z] += objective_flux
@@ -122,6 +152,7 @@ class SpatialDFBA(Process):
                         #TODO from the objective flux we need to get
                         #TODO go through exchange fluxes in the field and remove it from the environment
                         #calculate FBA for this species in this location
+
         return {
             'species': updated_biomass,
             'fields': updated_fields
