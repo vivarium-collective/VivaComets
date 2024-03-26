@@ -17,7 +17,7 @@ setup(
     description="",
     long_description=description,
     long_description_content_type="text/markdown",
-    url="https://github.com/vivarium-collective/VivaComet",
+    url="https://github.com/vivarium-collective/VivaComets",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
