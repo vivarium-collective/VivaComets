@@ -14,6 +14,9 @@ from scipy.ndimage import convolve
 import matplotlib.pyplot as plt
 import os
 
+script_directory = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_directory)
+
 
 def get_bin_site(location, n_bins, bounds):
     # compute the relative position of the point within the bounds.
@@ -195,6 +198,7 @@ def plot_fields_temporal(
         out_dir='out',
         filename='fields_at_z'
 ):
+    
     if not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
     z_index = z - 1
@@ -283,7 +287,7 @@ def test_fields():
         desired_time_points=time_list,
         actual_time_points=data['time'],
         z=2,
-        out_dir='out',
+        out_dir='./out',
         filename='fields_over_time')
     #test
 
