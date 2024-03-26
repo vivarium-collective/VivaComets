@@ -39,6 +39,6 @@ setup(
         "vivarium-core",
         "numpy",
         "cobra",
-        "pint",
+        "Pint>=0.18",
     ],
 )
