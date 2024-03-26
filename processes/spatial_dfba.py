@@ -2,7 +2,7 @@ import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 
-from processes.diffusion_field import get_bin_volume
+from processes.diffusion_field import get_bin_volume, plot_fields_temporal
 
 from cobra.io import read_sbml_model
 
@@ -136,6 +136,8 @@ def test_spatial_dfba():
 
     sim.update(total_time)
     data = sim.emitter.get_timeseries()
+
+    plot_fields_temporal(fields_data=data['fields'])
 
 
 if __name__ == '__main__':
