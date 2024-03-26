@@ -11,7 +11,6 @@ import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 from scipy.ndimage import convolve
-#from plots.field import plot_fields, plot_fields_temporal
 import matplotlib.pyplot as plt
 import os
 
@@ -233,9 +232,15 @@ def plot_fields_temporal(
                 cmap = molecule_colormaps.get(molecule, 'viridis')  # Default to 'viridis' if molecule not in dict
                 vmin, vmax = global_min_max[molecule]  # Use global min/max
                 cax = ax.imshow(data, cmap=cmap, interpolation='nearest',  vmin=vmin, vmax=vmax)
+
+                # molecule labels for top row
                 if time_idx == 0:
                     ax.set_title(molecule, fontsize=24)
-                ax.set_ylabel(f'Time {desired_time}', fontsize=22)
+
+                # time label for leftmost column
+                if mol_idx == 0:
+                    ax.set_ylabel(f'Time {desired_time}', fontsize=22)
+
                 ax.set_xticks([])
                 ax.set_yticks([])
                 if time_idx == 0:
@@ -250,10 +255,10 @@ def plot_fields_temporal(
 
 #  3D test_field
 def test_fields():
-    total_time = 6
+    total_time = 20
     config = {
-        'bounds': [3, 3, 3],
-        'nbins': [3, 3,3],
+        'bounds': [5, 5, 5],
+        'nbins': [5, 5, 5],
         'molecules': ['glucose', 'oxygen']
     }
     field = DiffusionField(config)
@@ -271,14 +276,15 @@ def test_fields():
     sim.update(total_time)
     # Get the results
     data = sim.emitter.get_timeseries()
-    time_list=[0,1,5, 50, 100, 1000]
+    time_list = [0, 1, int(total_time/4), int(total_time/2), total_time]
     # Inside test_fields function
-    plot_fields_temporal(fields_data=data['fields'],
-                     desired_time_points=time_list, 
-                     actual_time_points=data['time'],
-                     z=2, 
-                     out_dir='out',
-                     filename='fields_over_time')
+    plot_fields_temporal(
+        fields_data=data['fields'],
+        desired_time_points=time_list,
+        actual_time_points=data['time'],
+        z=2,
+        out_dir='out',
+        filename='fields_over_time')
 
 
 if __name__ == '__main__':
