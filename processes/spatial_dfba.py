@@ -10,6 +10,24 @@ from diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
 
 
+flux_mapping = {
+    "EX_cpd00027_e0": "Glucose",  # Alteromonas
+    "EX_glc__D_e": "Glucose",     # E. coli
+    "EX_cpd00001_e0": "Water",    # Alteromonas
+    "EX_h2o_e": "Water",          # E. coli
+    "EX_cpd00007_e0": "Oxygen",   # Alteromonas
+    "EX_o2_e": "Oxygen",          # E. coli
+    "EX_cpd00011_e0": "Carbon dioxide",  # Alteromonas
+    "EX_co2_e": "Carbon dioxide",        # E. coli
+    "EX_cpd00013_e0": "Ammonia",  # Alteromonas
+    "EX_nh4_e": "Ammonia",        # E. coli
+    "EX_cpd00067_e0": "Hydrogen",  # Alteromonas
+    "EX_h_e": "Hydrogen",          # E. coli
+    "EX_cpd00009_e0": "Phosphate",  # Alteromonas
+    "EX_pi_e": "Phosphate",         # E. coli
+}
+
+
 class SpatialDFBA(Process):
     """
     SpatialDFBA
@@ -109,6 +127,13 @@ class SpatialDFBA(Process):
         }
         return schema
 
+    def get_reaction_id(self, molecule, species_model):
+        # Map molecule name to reaction ID using the species_model id
+        for reaction_id, mol_name in flux_mapping.items():
+            if mol_name.lower() == molecule and reaction_id in [r.id for r in species_model.reactions]:
+                return reaction_id
+        return None
+
     def next_update(self, timestep, states):
         species = states['species']
         fields = states['fields']
@@ -137,11 +162,22 @@ class SpatialDFBA(Process):
                         # get the species at this position
                         species_biomass = species_array[x,y,z]
 
+                        # Adjust model with constraints from the environment using the mapping
+                        for molecule in self.molecule_ids:
+                            reaction_id = self.get_reaction_id(molecule, species_model)
+                            if reaction_id:
+                                species_model.reactions.get_by_id(reaction_id).lower_bound = -local_fields[molecule]
+
+
+
                         # adjust model with constraints from the environment
                         #TODO make this more generic, dont hardcode names.
-                        species_model.reactions.get_by_id('EX_glc__D_e').lower_bound = -local_fields['glucose'] # TODO make sure the units are compatible
-                        species_model.reactions.get_by_id('EX_o2_e').lower_bound = -local_fields['oxygen']
+                        # species_model.reactions.get_by_id('EX_glc__D_e').lower_bound = -local_fields['glucose'] # TODO make sure the units are compatible
+                        # species_model.reactions.get_by_id('EX_o2_e').lower_bound = -local_fields['oxygen']
 
+                        
+                        
+                        
                         # run FBA
                         solution = species_model.optimize()
                         objective_flux = solution.objective_value
