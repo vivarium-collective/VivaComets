@@ -162,26 +162,24 @@ class SpatialDFBA(Process):
                         # get the species at this position
                         species_biomass = species_array[x,y,z]
 
-                        # Adjust model with constraints from the environment using the mapping
-                        for molecule in self.molecule_ids:
-                            reaction_id = self.get_reaction_id(molecule, species_model)
-                            if reaction_id:
-                                species_model.reactions.get_by_id(reaction_id).lower_bound = -local_fields[molecule]
-
-
-
-                        # adjust model with constraints from the environment
-                        #TODO make this more generic, dont hardcode names.
-                        # species_model.reactions.get_by_id('EX_glc__D_e').lower_bound = -local_fields['glucose'] # TODO make sure the units are compatible
-                        # species_model.reactions.get_by_id('EX_o2_e').lower_bound = -local_fields['oxygen']
-
-                        
-                        
                         
                         # run FBA
                         solution = species_model.optimize()
                         objective_flux = solution.objective_value
                         updated_biomass[species_id][x,y,z] += objective_flux
+
+                        # CHECK Reduced the used flux from the environment.
+                        for reaction_id, molecule_name in flux_mapping.items():
+                            if molecule_name.lower() in ['glucose', 'oxygen'] and reaction_id in solution.fluxes.index:
+                                flux = solution.fluxes[reaction_id]
+                                if flux < 0:  # Consume molecule
+                                    molecule_key = molecule_name.lower()
+                                    if molecule_key not in updated_fields:
+                                        # Initialize the field if it doesn't exist (optional, based on your needs)
+                                        updated_fields[molecule_key] = np.zeros(self.nbins)
+                                    updated_fields[molecule_key][x,y,z] -= flux * self.bin_volume
+
+
 
                         #TODO from the objective flux we need to get
                         #TODO go through exchange fluxes in the field and remove it from the environment
