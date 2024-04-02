@@ -9,25 +9,6 @@ from vivarium.core.engine import Engine
 from diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
 
-
-flux_mapping = {
-    "EX_cpd00027_e0": "Glucose",  # Alteromonas
-    "EX_glc__D_e": "Glucose",     # E. coli
-    "EX_cpd00001_e0": "Water",    # Alteromonas
-    "EX_h2o_e": "Water",          # E. coli
-    "EX_cpd00007_e0": "Oxygen",   # Alteromonas
-    "EX_o2_e": "Oxygen",          # E. coli
-    "EX_cpd00011_e0": "Carbon dioxide",  # Alteromonas
-    "EX_co2_e": "Carbon dioxide",        # E. coli
-    "EX_cpd00013_e0": "Ammonia",  # Alteromonas
-    "EX_nh4_e": "Ammonia",        # E. coli
-    "EX_cpd00067_e0": "Hydrogen",  # Alteromonas
-    "EX_h_e": "Hydrogen",          # E. coli
-    "EX_cpd00009_e0": "Phosphate",  # Alteromonas
-    "EX_pi_e": "Phosphate",         # E. coli
-}
-
-
 class SpatialDFBA(Process):
     """
     SpatialDFBA
@@ -57,7 +38,7 @@ class SpatialDFBA(Process):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
-
+        print("self.species_ids", self.species_ids)
         # spatial settings
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters['nbins']
@@ -66,10 +47,13 @@ class SpatialDFBA(Process):
 
         # load FBA models
         self.models = {}
-        for species, model_path in self.parameters['species'].items():
-            self.models[species] = read_sbml_model(model_path)
-            #extract exchange fluxes self.externalmetabolite it should be a list.
-            #make a name dictionry for exchange fluxes
+        self.flux_id_maps = {}
+        for species in self.parameters.get('species_info', []):
+            model_path = species['model']
+            species_name = species['name']
+            self.models[species_name] = read_sbml_model(model_path)
+            self.flux_id_maps[species_name] = species['flux_id_map']
+            
 
     def initial_state(self, config=None):
 
@@ -127,63 +111,55 @@ class SpatialDFBA(Process):
         }
         return schema
 
-    def get_reaction_id(self, molecule, species_model):
-        # Map molecule name to reaction ID using the species_model id
-        for reaction_id, mol_name in flux_mapping.items():
-            if mol_name.lower() == molecule and reaction_id in [r.id for r in species_model.reactions]:
+    def get_reaction_id(self, molecule, species_name):
+        # Use species_name to fetch the correct flux_id_map and then map molecule to reaction ID
+        flux_id_map = self.flux_id_maps.get(species_name, {})
+        print("flux_id_map", flux_id_map)
+        for mol_name, reaction_id in flux_id_map.items():
+            print("mol_name", mol_name.lower(), molecule.lower())
+            if mol_name.lower() == molecule.lower():  # ensure case-insensitive comparison
                 return reaction_id
         return None
 
+    #TODO from the objective flux we need to get
+    #TODO go through exchange fluxes in the field and remove it from the environment
+    #calculate FBA for this species in this location
     def next_update(self, timestep, states):
-        species = states['species']
-        fields = states['fields']
-        updated_biomass = {
-            species_id: np.zeros(self.nbins)
-            for species_id in species.keys()}
-        updated_fields = {
-            field_id: np.zeros(self.nbins)
-            for field_id in fields.keys()}
+        species_states = states['species']
+        field_states = states['fields']
+        updated_biomass = {species_id: np.zeros(self.nbins) for species_id in species_states.keys()}
+        updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
 
-        # go to each small cubic and compute FBA for each species
-        for species_id, species_array in species.items():
-            # get the model for this species
+        # Iterate through each species present
+        for species_id, species_array in species_states.items():
+            # Retrieve the metabolic model for the current species
             species_model = self.models[species_id]
 
-            # go through each position
+            # Iterate through each bin in the environment
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
                     for z in range(self.nbins[2]):
+                        # Aggregate local environmental conditions for this bin
+                        local_fields = {field_id: field_array[x, y, z] for field_id, field_array in field_states.items()}
 
-                        # get all the fields for this location
-                        local_fields = {
-                            field_id: field_array[x,y,z]
-                            for field_id, field_array in fields.items()}
+                        # Fetch the current biomass for this species at this location
+                        species_biomass = species_array[x, y, z]
 
-                        # get the species at this position
-                        species_biomass = species_array[x,y,z]
-
-                        
-                        # run FBA
+                        # Conduct FBA for the current species under local conditions
                         solution = species_model.optimize()
-                        objective_flux = solution.objective_value
-                        updated_biomass[species_id][x,y,z] += objective_flux
+                        objective_flux = solution.objective_value  # Objective flux typically represents growth rate
+                        updated_biomass[species_id][x, y, z] += objective_flux
 
-                        # CHECK Reduced the used flux from the environment.
-                        for reaction_id, molecule_name in flux_mapping.items():
-                            if molecule_name.lower() in ['glucose', 'oxygen'] and reaction_id in solution.fluxes.index:
+                        # Update environmental fields based on the metabolic byproducts/consumption
+                        for molecule_name in self.molecule_ids:
+                            # Convert molecule names to the corresponding reaction IDs in the model
+                            reaction_id = self.get_reaction_id(molecule_name, species_id)
+                            if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                if flux < 0:  # Consume molecule
-                                    molecule_key = molecule_name.lower()
-                                    if molecule_key not in updated_fields:
-                                        # Initialize the field if it doesn't exist (optional, based on your needs)
-                                        updated_fields[molecule_key] = np.zeros(self.nbins)
-                                    updated_fields[molecule_key][x,y,z] -= flux * self.bin_volume
-
-
-
-                        #TODO from the objective flux we need to get
-                        #TODO go through exchange fluxes in the field and remove it from the environment
-                        #calculate FBA for this species in this location
+                                if molecule_name.lower() not in updated_fields:
+                                    updated_fields[molecule_name.lower()] = np.zeros(self.nbins)
+                                # Adjust the concentration of the molecule in the environment based on the flux
+                                updated_fields[molecule_name.lower()][x, y, z] += flux * self.bin_volume
 
         return {
             'species': updated_biomass,
@@ -191,16 +167,35 @@ class SpatialDFBA(Process):
         }
 
 
+
 def test_spatial_dfba():
     # Configuration for the spatial environment and simulation
     total_time = 2
+    timestep = 1 
+    desired_time_points = [0, timestep, total_time]
+    actual_time_points = desired_time_points
     config = {
         'bounds': [3, 3, 3],
         'nbins': [3, 3, 3],
-        'molecules': ['glucose'],
-        'species': {
-            'Alteromonas': '../data/Alteromonas_Model.xml',
-        }
+        'molecules': ['glucose', 'oxygen'],
+        "species_info": [
+            {
+                "model": '../data/Alteromonas_Model.xml', 
+                "name": "Alteromonas",
+                "flux_id_map": {
+                    "glucose" : "EX_cpd00027_e0",
+                    "Oxygen": "EX_cpd00007_e0"
+                }
+            },
+            {
+                "model": '../data/e_coli_core.xml', 
+                "name": "ecoli",
+                "flux_id_map": {
+                    "glucose" : "EX_glc__D_e",
+                    "Oxygen": "EX_o2_e"
+                }
+            }
+        ]
     }
 
     fba_process = SpatialDFBA(config)

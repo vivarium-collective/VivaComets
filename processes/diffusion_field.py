@@ -47,7 +47,7 @@ class DiffusionField(Process):
         'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
         'diffusion': {
             'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
-            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s
+            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s #TODO move it to 
         },
     }
 
@@ -162,7 +162,7 @@ class DiffusionField(Process):
     def diffuse(self, field, timestep, diffusion_rate):
         if field.ndim == 1:
             laplacian_kernel = np.array([1, -2, 1])
-        elif field.ndim == 2:
+        elif field.ndim == 2:    #TODO make the code only for 2D
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
                                          [0,  1, 0]])
@@ -257,15 +257,19 @@ def plot_fields_temporal(
     plt.close()
 
 
-#  3D test_field
+#  3D test_field TODO make 1D and 2D test, make sure the they run and have correct result. Asserts
 def test_fields():
     total_time = 20
     config = {
         'bounds': [5, 5, 5],
         'nbins': [5, 5, 5],
-        'molecules': ['glucose', 'oxygen']
+        'molecules': ['glucose', 'oxygen'], 
+        'diffusion': {
+            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s 
+        },
     }
-    field = DiffusionField(config)
+    field = DiffusionField(config) 
     initial_state = field.initial_state({'random': 1.0})
     sim = Engine(
         initial_state=initial_state,
@@ -279,7 +283,7 @@ def test_fields():
     # Run the simulation
     sim.update(total_time)
     # Get the results
-    data = sim.emitter.get_timeseries()
+    data = sim.emitter.get_timeseries()  #TODO add a line and make assert to check, like biomass should not decreased as the times go
     time_list = [0, 1, int(total_time/4), int(total_time/2), total_time]
     # Inside test_fields function
     plot_fields_temporal(
