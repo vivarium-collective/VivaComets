@@ -38,7 +38,6 @@ class SpatialDFBA(Process):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
-        print("self.species_ids", self.species_ids)
         # spatial settings
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters['nbins']
@@ -114,9 +113,7 @@ class SpatialDFBA(Process):
     def get_reaction_id(self, molecule, species_name):
         # Use species_name to fetch the correct flux_id_map and then map molecule to reaction ID
         flux_id_map = self.flux_id_maps.get(species_name, {})
-        print("flux_id_map", flux_id_map)
         for mol_name, reaction_id in flux_id_map.items():
-            print("mol_name", mol_name.lower(), molecule.lower())
             if mol_name.lower() == molecule.lower():  # ensure case-insensitive comparison
                 return reaction_id
         return None
@@ -165,7 +162,6 @@ class SpatialDFBA(Process):
             'species': updated_biomass,
             'fields': updated_fields
         }
-
 
 
 def test_spatial_dfba():
@@ -223,7 +219,9 @@ def test_spatial_dfba():
     sim.update(total_time)
     data = sim.emitter.get_timeseries()
 
-    plot_fields_temporal(fields_data=data['fields'])
+    #plot_fields_temporal(fields_data=data['fields'])
+    plot_fields_temporal(fields_data=data['fields'], desired_time_points=desired_time_points, actual_time_points=actual_time_points)
+
 
 
 if __name__ == '__main__':
