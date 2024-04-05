@@ -22,8 +22,8 @@ class SpatialDFBA(Process):
     - species: a dictionary of species names and paths to their FBA models
     """
     defaults = {
-        'bounds': [3, 3, 3],  # cm
-        'nbins': [3, 3, 3],
+        'bounds': [3, 3],  # cm
+        'nbins': [3, 3],
         'molecules': [
             'glucose',
             'oxygen'
@@ -35,11 +35,13 @@ class SpatialDFBA(Process):
     }
 
     def __init__(self, parameters=None):
+        # assert for 2D 
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
         # spatial settings
         self.bounds = self.parameters['bounds']
+        assert len(self.bounds) == 2, "This process ONLY support 2D"
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         self.bin_volume = get_bin_volume(self.bin_size)
@@ -135,28 +137,28 @@ class SpatialDFBA(Process):
             # Iterate through each bin in the environment
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
-                    for z in range(self.nbins[2]):
-                        # Aggregate local environmental conditions for this bin
-                        local_fields = {field_id: field_array[x, y, z] for field_id, field_array in field_states.items()}
+    
+                    # Aggregate local environmental conditions for this bin
+                    local_fields = {field_id: field_array[x, y] for field_id, field_array in field_states.items()}
 
-                        # Fetch the current biomass for this species at this location
-                        species_biomass = species_array[x, y, z]
+                    # Fetch the current biomass for this species at this location
+                    species_biomass = species_array[x, y]
 
-                        # Conduct FBA for the current species under local conditions
-                        solution = species_model.optimize()
-                        objective_flux = solution.objective_value  # Objective flux typically represents growth rate
-                        updated_biomass[species_id][x, y, z] += objective_flux
+                    # Conduct FBA for the current species under local conditions
+                    solution = species_model.optimize()
+                    objective_flux = solution.objective_value  # Objective flux typically represents growth rate
+                    updated_biomass[species_id][x, y] += objective_flux
 
-                        # Update environmental fields based on the metabolic byproducts/consumption
-                        for molecule_name in self.molecule_ids:
-                            # Convert molecule names to the corresponding reaction IDs in the model
-                            reaction_id = self.get_reaction_id(molecule_name, species_id)
-                            if reaction_id and reaction_id in solution.fluxes.index:
-                                flux = solution.fluxes[reaction_id]
-                                if molecule_name.lower() not in updated_fields:
-                                    updated_fields[molecule_name.lower()] = np.zeros(self.nbins)
-                                # Adjust the concentration of the molecule in the environment based on the flux
-                                updated_fields[molecule_name.lower()][x, y, z] += flux * self.bin_volume
+                    # Update environmental fields based on the metabolic byproducts/consumption
+                    for molecule_name in self.molecule_ids:
+                        # Convert molecule names to the corresponding reaction IDs in the model
+                        reaction_id = self.get_reaction_id(molecule_name, species_id)
+                        if reaction_id and reaction_id in solution.fluxes.index:
+                            flux = solution.fluxes[reaction_id]
+                            if molecule_name.lower() not in updated_fields:
+                                updated_fields[molecule_name.lower()] = np.zeros(self.nbins)
+                            # Adjust the concentration of the molecule in the environment based on the flux
+                            updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume
 
         return {
             'species': updated_biomass,
@@ -171,8 +173,8 @@ def test_spatial_dfba():
     desired_time_points = [0, timestep, total_time]
     actual_time_points = desired_time_points
     config = {
-        'bounds': [3, 3, 3],
-        'nbins': [3, 3, 3],
+        'bounds': [3, 3],
+        'nbins': [3, 3],
         'molecules': ['glucose', 'oxygen'],
         "species_info": [
             {
@@ -218,9 +220,15 @@ def test_spatial_dfba():
 
     sim.update(total_time)
     data = sim.emitter.get_timeseries()
-
-    #plot_fields_temporal(fields_data=data['fields'])
-    plot_fields_temporal(fields_data=data['fields'], desired_time_points=desired_time_points, actual_time_points=actual_time_points)
+    fields = data["fields"]
+    fields.update(data["species"])
+    plot_fields_temporal(
+        fields_data=fields, 
+        desired_time_points=desired_time_points, 
+        actual_time_points=actual_time_points,
+        plot_fields = ["glucose", "oxygen", "Alteromonas"],
+        molecule_colormaps= {"glucose": "Blues" , "oxygen": "Greens", "Alteromonas": "Purples"}
+        )
 
 
 

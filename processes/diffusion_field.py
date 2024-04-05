@@ -19,25 +19,22 @@ os.chdir(script_directory)
 
 
 def get_bin_site(location, n_bins, bounds):
-    # compute the relative position of the point within the bounds.
     bin_site_no_rounding = np.array([
         location[0] * n_bins[0] / bounds[0], 
-        location[1] * n_bins[1] / bounds[1],
-        location[2] * n_bins[2] / bounds[2]  
+        location[1] * n_bins[1] / bounds[1]
     ])
     bin_site = tuple(np.floor(bin_site_no_rounding).astype(int) % n_bins)
     return bin_site  # address of the bin
 
 
 def get_bin_volume(bin_size):
-    total_volume = np.prod(bin_size) 
-    return total_volume
+    return np.prod(bin_size)
 
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [10, 10, 10],  # cm
-        'nbins': [10, 10, 10],
+        'bounds': [10, 10],  # cm
+        'nbins': [10, 10],
         'molecules': [
             'glucose',
             'oxygen'
@@ -57,8 +54,9 @@ class DiffusionField(Process):
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
+        assert len(self.bounds) == 2, "Proccess only support 2D"
         diffusion_rate = self.parameters['default_diffusion_rate']
-        dx, dy, dz = self.bin_size  
+        dx, dy = self.bin_size  
         dx2_dy2_dz2 = get_bin_volume(self.bin_size)
         self.diffusion_rate = diffusion_rate / dx2_dy2_dz2
         self.molecule_specific_diffusion = {
@@ -66,7 +64,9 @@ class DiffusionField(Process):
             for mol_id, diff_rate in self.parameters['diffusion'].items()
         }
 
-        diffusion_dt = 0.5 * min(dx**2, dy**2, dz**2) / (2 * diffusion_rate)
+    
+
+        diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
         self.diffusion_dt = min(diffusion_dt, self.parameters['default_diffusion_dt'])
         self.bin_volume = get_bin_volume(self.bin_size)
 
@@ -175,7 +175,7 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            result = convolve(field, laplacian_kernel, mode='reflect') #TODO make it work for different dimentions TODO also test it in different conditions
+            result = convolve(field, laplacian_kernel, mode='reflect') 
             field += diffusion_rate * dt * result  #mode constant cval=0.0 ,try reflect
             t += dt
         return field
@@ -194,48 +194,45 @@ def plot_fields_temporal(
         fields_data,
         desired_time_points,
         actual_time_points,
-        z=2,
         out_dir='out',
-        filename='fields_at_z'
+        filename='fields_at_z', 
+        molecule_colormaps = {},
+        plot_fields = ["glucose" , "oxygen"]
 ):
     
     if not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
-    z_index = z - 1
-
+   
     # Convert desired and actual time points to float for accurate indexing
     desired_time_points = [float(time) for time in desired_time_points]
     actual_time_points = [float(time) for time in actual_time_points]
-    num_molecules = len(fields_data)
+    num_molecules = len(plot_fields)
     num_times = len(desired_time_points)
     fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, num_times * 5), squeeze=False)
-    if num_molecules == 1 or num_times == 1:
-        axs = np.array([[axs]])
-
-    # Define a colormap for each molecule
-    molecule_colormaps = {
-        'glucose': 'Blues',
-        'oxygen': 'Greens',
-    }
-
+    
     # Calculate global min/max for each molecule across all timepoints
     global_min_max = {}
-    for molecule in fields_data.keys():
+    for molecule in fields_data.keys() :
+        if molecule not in plot_fields:
+            continue
         all_data = np.concatenate([np.array(times_data) for times_data in fields_data[molecule]], axis=0)
         global_min_max[molecule] = (np.min(all_data), np.max(all_data))
+    
 
     for mol_idx, molecule in enumerate(fields_data.keys()):
+        if molecule not in plot_fields:
+            continue
         times_data = fields_data[molecule]
         for time_idx, desired_time in enumerate(desired_time_points):
             if desired_time in actual_time_points:
                 actual_idx = actual_time_points.index(desired_time)
                 data_array = np.array(times_data[actual_idx])  # Accessing the time-specific data
-                data = data_array[..., z_index]
+    
                 ax = axs[time_idx, mol_idx]
                 # Use the specified colormap for the molecule
-                cmap = molecule_colormaps.get(molecule, 'viridis')  # Default to 'viridis' if molecule not in dict
+                cmap = molecule_colormaps.get(molecule, 'Blues')  # Default to 'viridis' if molecule not in dict
                 vmin, vmax = global_min_max[molecule]  # Use global min/max
-                cax = ax.imshow(data, cmap=cmap, interpolation='nearest',  vmin=vmin, vmax=vmax)
+                cax = ax.imshow(data_array, cmap=cmap, interpolation='nearest',  vmin=vmin, vmax=vmax)
 
                 # molecule labels for top row
                 if time_idx == 0:
@@ -257,23 +254,22 @@ def plot_fields_temporal(
     plt.close()
 
 
-#  3D test_field TODO make 1D and 2D test, make sure the they run and have correct result. Asserts
 def test_fields():
     total_time = 20
     config = {
-        'bounds': [5, 5, 5],
-        'nbins': [5, 5, 5],
+        'bounds': [5, 5],
+        'nbins': [5, 5],
         'molecules': ['glucose', 'oxygen'], 
         'diffusion': {
             'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
             'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s 
         },
     }
-    field = DiffusionField(config) 
-    initial_state = field.initial_state({'random': 1.0})
+    Diffusion_field = DiffusionField(config) 
+    initial_state = Diffusion_field.initial_state({'random': 1.0})
     sim = Engine(
         initial_state=initial_state,
-        processes={'diffusion_process': field},
+        processes={'diffusion_process': Diffusion_field},
         topology={'diffusion_process': {
             'fields': ('fields',),
             'species': ('species',),
@@ -290,9 +286,8 @@ def test_fields():
         fields_data=data['fields'],
         desired_time_points=time_list,
         actual_time_points=data['time'],
-        z=2,
         out_dir='./out',
-        filename='fields_over_time')
+        filename='Diffusion_test')
     #test
 
 
