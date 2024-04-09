@@ -29,13 +29,11 @@ class SpatialDFBA(Process):
             'oxygen'
         ],
         'species': {
-            'Alteromonas': '../data/Alteromonas_Model.xml',
-            'ecoli': '../data/e_coli_core.xml'
-        }
+            'Alteromonas': '../data/Alteromonas_Model.xml'
+        },
     }
 
     def __init__(self, parameters=None):
-        # assert for 2D 
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
@@ -147,7 +145,7 @@ class SpatialDFBA(Process):
                     # Conduct FBA for the current species under local conditions
                     solution = species_model.optimize()
                     objective_flux = solution.objective_value  # Objective flux typically represents growth rate
-                    updated_biomass[species_id][x, y] += objective_flux
+                    updated_biomass[species_id][x, y] += objective_flux  #TODO multiply by timestep and current biomass
 
                     # Update environmental fields based on the metabolic byproducts/consumption
                     for molecule_name in self.molecule_ids:
@@ -173,28 +171,37 @@ def test_spatial_dfba():
     desired_time_points = [0, timestep, total_time]
     actual_time_points = desired_time_points
     config = {
-        'bounds': [3, 3],
-        'nbins': [3, 3],
-        'molecules': ['glucose', 'oxygen'],
+        'bounds': [3, 3],  # dimensions of the environment
+        'nbins': [3, 3],   # division into bins
+        'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             {
                 "model": '../data/Alteromonas_Model.xml', 
                 "name": "Alteromonas",
                 "flux_id_map": {
-                    "glucose" : "EX_cpd00027_e0",
-                    "Oxygen": "EX_cpd00007_e0"
+                    "glucose": "EX_cpd00027_e0",
+                    "oxygen": "EX_cpd00007_e0"
+                },
+                "kinetic_params": {
+                    "glucose": (0.5, 2.0),  # Km, Vmax for glucose
+                    "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
                 }
             },
             {
                 "model": '../data/e_coli_core.xml', 
                 "name": "ecoli",
                 "flux_id_map": {
-                    "glucose" : "EX_glc__D_e",
-                    "Oxygen": "EX_o2_e"
+                    "glucose": "EX_glc__D_e",
+                    "oxygen": "EX_o2_e"
+                },
+                "kinetic_params": {
+                    "glucose": (0.4, 1.5),  # Km, Vmax for glucose
+                    "oxygen": (0.25, 4.5),  # Km, Vmax for oxygen
                 }
             }
         ]
     }
+
 
     fba_process = SpatialDFBA(config)
 
