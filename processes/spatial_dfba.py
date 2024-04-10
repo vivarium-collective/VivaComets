@@ -47,11 +47,13 @@ class SpatialDFBA(Process):
         # load FBA models
         self.models = {}
         self.flux_id_maps = {}
+        self.kinetic_params={}
         for species in self.parameters.get('species_info', []):
             model_path = species['model']
             species_name = species['name']
             self.models[species_name] = read_sbml_model(model_path)
             self.flux_id_maps[species_name] = species['flux_id_map']
+            self.kinetic_params[species_name] = species['kinetic_params']
             
 
     def initial_state(self, config=None):
@@ -116,6 +118,15 @@ class SpatialDFBA(Process):
         for mol_name, reaction_id in flux_id_map.items():
             if mol_name.lower() == molecule.lower():  # ensure case-insensitive comparison
                 return reaction_id
+        return None
+    
+    def get_kinetic_params(self, species_name, molecule_name):
+        """
+        Fetches the kinetic parameters (Km and Vmax) for a given molecule and species.
+        """
+        species_info = next((item for item in self.parameters['species_info'] if item['name'] == species_name), None)
+        if species_info and 'kinetic_params' in species_info:
+            return species_info['kinetic_params'].get(molecule_name)
         return None
 
     #TODO from the objective flux we need to get
