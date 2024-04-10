@@ -138,41 +138,42 @@ class SpatialDFBA(Process):
         updated_biomass = {species_id: np.zeros(self.nbins) for species_id in species_states.keys()}
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
 
-        # Iterate through each species present
         for species_id, species_array in species_states.items():
-            # Retrieve the metabolic model for the current species
             species_model = self.models[species_id]
 
-            # Iterate through each bin in the environment
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
-    
-                    # Aggregate local environmental conditions for this bin
                     local_fields = {field_id: field_array[x, y] for field_id, field_array in field_states.items()}
-
-                    # Fetch the current biomass for this species at this location
                     species_biomass = species_array[x, y]
 
-                    # Conduct FBA for the current species under local conditions
-                    solution = species_model.optimize()
-                    objective_flux = solution.objective_value  # Objective flux typically represents growth rate
-                    updated_biomass[species_id][x, y] += objective_flux  #TODO multiply by timestep and current biomass
+                    # Update uptake rates based on local conditions and kinetic parameters
+                    for molecule_name, local_concentration in local_fields.items():
+                        kinetic_params = self.get_kinetic_params(species_id, molecule_name)
+                        if kinetic_params:
+                            Km, Vmax = kinetic_params
+                            uptake_rate = Vmax * local_concentration / (Km + local_concentration)
+                            reaction_id = self.get_reaction_id(molecule_name, species_id)
+                            if reaction_id:
+                                reaction = species_model.reactions.get_by_id(reaction_id)
+                                initial_lower_bound = reaction.lower_bound  # Store the initial lower bound
+                                # Update the reaction lower bound with the more restrictive of the calculated or initial rate
+                                reaction.lower_bound = max(initial_lower_bound, -uptake_rate)
 
-                    # Update environmental fields based on the metabolic byproducts/consumption
-                    for molecule_name in self.molecule_ids:
-                        # Convert molecule names to the corresponding reaction IDs in the model
-                        reaction_id = self.get_reaction_id(molecule_name, species_id)
-                        if reaction_id and reaction_id in solution.fluxes.index:
-                            flux = solution.fluxes[reaction_id]
-                            if molecule_name.lower() not in updated_fields:
-                                updated_fields[molecule_name.lower()] = np.zeros(self.nbins)
-                            # Adjust the concentration of the molecule in the environment based on the flux
-                            updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume
+                    solution = species_model.optimize()
+                    if solution.status == 'optimal':
+                        objective_flux = solution.objective_value
+                        updated_biomass[species_id][x, y] += objective_flux * species_biomass * timestep
+
+                        for molecule_name in self.molecule_ids:
+                            reaction_id = self.get_reaction_id(molecule_name, species_id)
+                            if reaction_id and reaction_id in solution.fluxes.index:
+                                flux = solution.fluxes[reaction_id]
+                                updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep
 
         return {
-            'species': updated_biomass,
+            'species': updated_biomass, 
             'fields': updated_fields
-        }
+            }
 
 
 def test_spatial_dfba():
@@ -186,18 +187,18 @@ def test_spatial_dfba():
         'nbins': [3, 3],   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
-            {
-                "model": '../data/Alteromonas_Model.xml', 
-                "name": "Alteromonas",
-                "flux_id_map": {
-                    "glucose": "EX_cpd00027_e0",
-                    "oxygen": "EX_cpd00007_e0"
-                },
-                "kinetic_params": {
-                    "glucose": (0.5, 2.0),  # Km, Vmax for glucose
-                    "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
-                }
-            },
+            # {
+            #     "model": '../data/Alteromonas_Model.xml', 
+            #     "name": "Alteromonas",
+            #     "flux_id_map": {
+            #         "glucose": "EX_cpd00027_e0",
+            #         "oxygen": "EX_cpd00007_e0"
+            #     },
+            #     "kinetic_params": {
+            #         "glucose": (0.5, 2.0),  # Km, Vmax for glucose
+            #         "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
+            #     }
+            # },
             {
                 "model": '../data/e_coli_core.xml', 
                 "name": "ecoli",
