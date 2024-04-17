@@ -137,9 +137,11 @@ class SpatialDFBA(Process):
         field_states = states['fields']
         updated_biomass = {species_id: np.zeros(self.nbins) for species_id in species_states.keys()}
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
+        all_species_objective_flux = np.zeros(self.nbins)
 
         for species_id, species_array in species_states.items():
             species_model = self.models[species_id]
+            
 
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
@@ -163,16 +165,22 @@ class SpatialDFBA(Process):
                     if solution.status == 'optimal':
                         objective_flux = solution.objective_value
                         updated_biomass[species_id][x, y] += objective_flux * species_biomass * timestep
+                        all_species_objective_flux[x, y] += objective_flux
 
                         for molecule_name in self.molecule_ids:
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep
+        if len(species_states) == 1:
+            only_species_flux = updated_biomass[next(iter(species_states.keys()))]
+            assert np.allclose(only_species_flux, all_species_objective_flux), \
+                "All-species objective flux does not match the single species' flux when only one species is present."
 
         return {
             'species': updated_biomass, 
-            'fields': updated_fields
+            'fields': updated_fields,
+            'all_species_objective_flux': all_species_objective_flux
             }
 
 
@@ -187,18 +195,18 @@ def test_spatial_dfba():
         'nbins': [3, 3],   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
-            # {
-            #     "model": '../data/Alteromonas_Model.xml', 
-            #     "name": "Alteromonas",
-            #     "flux_id_map": {
-            #         "glucose": "EX_cpd00027_e0",
-            #         "oxygen": "EX_cpd00007_e0"
-            #     },
-            #     "kinetic_params": {
-            #         "glucose": (0.5, 2.0),  # Km, Vmax for glucose
-            #         "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
-            #     }
-            # },
+            {
+                "model": '../data/Alteromonas_Model.xml', 
+                "name": "Alteromonas",
+                "flux_id_map": {
+                    "glucose": "EX_cpd00027_e0",
+                    "oxygen": "EX_cpd00007_e0"
+                },
+                "kinetic_params": {
+                    "glucose": (0.5, 2.0),  # Km, Vmax for glucose
+                    "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
+                }
+            },
             {
                 "model": '../data/e_coli_core.xml', 
                 "name": "ecoli",
