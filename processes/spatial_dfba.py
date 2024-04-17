@@ -8,6 +8,8 @@ from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 from diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
+import matplotlib.pyplot as plt
+import os
 
 class SpatialDFBA(Process):
     """
@@ -28,34 +30,37 @@ class SpatialDFBA(Process):
             'glucose',
             'oxygen'
         ],
-        'species': {
-            'Alteromonas': '../data/Alteromonas_Model.xml'
-        },
+        # 'species': {
+        #     'Alteromonas': '../data/Alteromonas_Model.xml'
+        # },
+        'species_info': [  # Changed from 'species' to 'species_info' for clarity
+            {'name': 'Alteromonas', 'model': '../data/Alteromonas_Model.xml'}
+        ],
     }
 
     def __init__(self, parameters=None):
+        parameters = {**self.defaults, **(parameters or {})} 
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
-        self.species_ids = self.parameters['species']
-        # spatial settings
+        self.species_ids = {info['name']: info['model'] for info in self.parameters.get('species_info', [])}
+        #spatial setting
         self.bounds = self.parameters['bounds']
-        assert len(self.bounds) == 2, "This process ONLY support 2D"
+        assert len(self.bounds) == 2, "This process ONLY supports 2D"
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         self.bin_volume = get_bin_volume(self.bin_size)
-
-        # load FBA models
+        #load FBA Model
         self.models = {}
         self.flux_id_maps = {}
-        self.kinetic_params={}
+        self.kinetic_params = {}
         for species in self.parameters.get('species_info', []):
             model_path = species['model']
             species_name = species['name']
             self.models[species_name] = read_sbml_model(model_path)
+            print(f"Loaded model for {species_name}")
             self.flux_id_maps[species_name] = species['flux_id_map']
             self.kinetic_params[species_name] = species['kinetic_params']
-            
-
+    
     def initial_state(self, config=None):
 
         # update fields and species with initial values from config
@@ -71,9 +76,9 @@ class SpatialDFBA(Process):
                 if molecule in self.molecule_ids
             },
             'species': {
-                species: np.ones(self.nbins) * biomass
-                for species, biomass in species.items()
-                if species in self.species_ids
+                name: np.ones(self.nbins) * biomass
+                for name, biomass in species.items()
+                if name in self.species_ids
             }
         }
         return initial_state
@@ -82,35 +87,39 @@ class SpatialDFBA(Process):
         schema = {
             'species': {},
             'fields': {},
-        }
-        for species in self.parameters['species']:
-            schema['species'].update({
-                species: {
-                    '_default': np.ones(self.nbins),
-                    '_updater': 'nonnegative_accumulate',
+            'dimensions': {
+                'bounds': {
+                    '_value': self.bounds,
+                    '_updater': 'set',
+                    '_emit': True
+                },
+                'nbins': {
+                    '_value': self.nbins,
+                    '_updater': 'set',
                     '_emit': True
                 }
-            })
-        for mol in self.parameters['molecules']:
-            schema['fields'].update({
-                mol: {
-                    '_default': np.ones(self.nbins),
-                    '_updater': 'nonnegative_accumulate',
-                    '_emit': True
-                }
-            })
-        schema['dimensions'] = {
-            'bounds': {
-                '_value': self.bounds,
-                '_updater': 'set',
-                '_emit': True},
-            'nbins': {
-                '_value': self.nbins,
-                '_updater': 'set',
-                '_emit': True
             }
         }
+
+        # Define schema for each species based on species_info
+        for species_info in self.parameters['species_info']:
+            species_name = species_info['name']
+            schema['species'][species_name] = {
+                '_default': np.zeros(self.nbins),  # Initialize to zero biomass
+                '_updater': 'nonnegative_accumulate',
+                '_emit': True
+            }
+
+        # Define schema for each molecule listed in the parameters
+        for molecule in self.parameters['molecules']:
+            schema['fields'][molecule] = {
+                '_default': np.zeros(self.nbins),  # Initialize to zero concentration
+                '_updater': 'nonnegative_accumulate',
+                '_emit': True
+            }
+
         return schema
+
 
     def get_reaction_id(self, molecule, species_name):
         # Use species_name to fetch the correct flux_id_map and then map molecule to reaction ID
@@ -140,8 +149,11 @@ class SpatialDFBA(Process):
         all_species_objective_flux = np.zeros(self.nbins)
 
         for species_id, species_array in species_states.items():
-            species_model = self.models[species_id]
-            
+            if species_id not in self.models:
+                print(f"Model for {species_id} not found")
+                continue  # Skip this species if the model is not found
+
+            species_model = self.models[species_id] 
 
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
@@ -182,11 +194,37 @@ class SpatialDFBA(Process):
             'fields': updated_fields,
             'all_species_objective_flux': all_species_objective_flux
             }
+    
+    def plot_objective_flux(self, data, time_points, species_names, out_dir='out', filename='objective_flux'):
+    # method implementation
+
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        num_species = len(species_names)
+        num_times = len(time_points)
+        fig, axs = plt.subplots(num_times, num_species + 1, figsize=(num_species * 5, num_times * 5), squeeze=False)
+
+        for i, time in enumerate(time_points):
+            for j, species in enumerate(species_names):
+                axs[i, j].imshow(data[species][time], cmap='viridis')
+                axs[i, j].set_title(f"{species} at time {time}")
+                axs[i, j].set_xticks([])
+                axs[i, j].set_yticks([])
+
+            axs[i, -1].imshow(data['all_species_objective_flux'][time], cmap='viridis')
+            axs[i, -1].set_title(f"Total Biomass at time {time}")
+            axs[i, -1].set_xticks([])
+            axs[i, -1].set_yticks([])
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, filename))
+        plt.close()
 
 
 def test_spatial_dfba():
     # Configuration for the spatial environment and simulation
-    total_time = 2
+    total_time = 3
     timestep = 1 
     desired_time_points = [0, timestep, total_time]
     actual_time_points = desired_time_points
@@ -195,18 +233,18 @@ def test_spatial_dfba():
         'nbins': [3, 3],   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
-            {
-                "model": '../data/Alteromonas_Model.xml', 
-                "name": "Alteromonas",
-                "flux_id_map": {
-                    "glucose": "EX_cpd00027_e0",
-                    "oxygen": "EX_cpd00007_e0"
-                },
-                "kinetic_params": {
-                    "glucose": (0.5, 2.0),  # Km, Vmax for glucose
-                    "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
-                }
-            },
+            # {
+            #     "model": '../data/Alteromonas_Model.xml', 
+            #     "name": "Alteromonas",
+            #     "flux_id_map": {
+            #         "glucose": "EX_cpd00027_e0",
+            #         "oxygen": "EX_cpd00007_e0"
+            #     },
+            #     "kinetic_params": {
+            #         "glucose": (0.5, 2.0),  # Km, Vmax for glucose
+            #         "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
+            #     }
+            # },
             {
                 "model": '../data/e_coli_core.xml', 
                 "name": "ecoli",
@@ -231,7 +269,7 @@ def test_spatial_dfba():
             'glucose': 5.0
         },
         'species': {
-            'Alteromonas': 1.0
+            'ecoli': 1.0
         }
     })
 
@@ -247,14 +285,29 @@ def test_spatial_dfba():
 
     sim.update(total_time)
     data = sim.emitter.get_timeseries()
+    print("Data keys:", data.keys())  # Check what keys exist
+    print("Species data:", data["species"])  # Specific check for species data
+
     fields = data["fields"]
     fields.update(data["species"])
+
+    print("Fields after update:", fields.keys())  
+
+    fba_process.plot_objective_flux(
+    data=fields,
+    time_points=desired_time_points,
+    species_names=[species['name'] for species in config['species_info']],
+    out_dir='./output',
+    filename='objective_flux_plot'
+)
+
+
     plot_fields_temporal(
         fields_data=fields, 
         desired_time_points=desired_time_points, 
         actual_time_points=actual_time_points,
-        plot_fields = ["glucose", "oxygen", "Alteromonas"],
-        molecule_colormaps= {"glucose": "Blues" , "oxygen": "Greens", "Alteromonas": "Purples"}
+        plot_fields = ["glucose", "oxygen", "ecoli"],
+        molecule_colormaps= {"glucose": "Blues" , "oxygen": "Greens", "ecoli": "Purples"}
         )
 
 
