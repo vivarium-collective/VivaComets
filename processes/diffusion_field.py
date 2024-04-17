@@ -160,16 +160,10 @@ class DiffusionField(Process):
         return np.random.rand(*self.nbins)
 
     def diffuse(self, field, timestep, diffusion_rate):
-        if field.ndim == 1:
-            laplacian_kernel = np.array([1, -2, 1])
-        elif field.ndim == 2:    #TODO make the code only for 2D
+        if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
                                          [0,  1, 0]])
-        elif field.ndim == 3:
-            laplacian_kernel = np.array([[[0, 0, 0], [0,  1, 0], [0, 0, 0]],
-                                         [[0, 1, 0], [1, -6, 1], [0, 1, 0]],
-                                         [[0, 0, 0], [0,  1, 0], [0, 0, 0]]])
         else:
             raise ValueError('Field must be 1D, 2D, or 3D')
         t = 0.0
