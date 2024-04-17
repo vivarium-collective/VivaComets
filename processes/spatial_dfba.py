@@ -33,7 +33,7 @@ class SpatialDFBA(Process):
         # 'species': {
         #     'Alteromonas': '../data/Alteromonas_Model.xml'
         # },
-        'species_info': [  # Changed from 'species' to 'species_info' for clarity
+        'species_info': [ 
             {'name': 'Alteromonas', 'model': '../data/Alteromonas_Model.xml'}
         ],
     }
@@ -176,8 +176,9 @@ class SpatialDFBA(Process):
                     solution = species_model.optimize()
                     if solution.status == 'optimal':
                         objective_flux = solution.objective_value
-                        updated_biomass[species_id][x, y] += objective_flux * species_biomass * timestep
-                        all_species_objective_flux[x, y] += objective_flux
+                        biomass_update = objective_flux * species_biomass * timestep
+                        updated_biomass[species_id][x, y] += biomass_update
+                        all_species_objective_flux[x, y] += biomass_update
 
                         for molecule_name in self.molecule_ids:
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
@@ -189,6 +190,7 @@ class SpatialDFBA(Process):
             assert np.allclose(only_species_flux, all_species_objective_flux), \
                 "All-species objective flux does not match the single species' flux when only one species is present."
 
+        
         return {
             'species': updated_biomass, 
             'fields': updated_fields,
@@ -196,8 +198,6 @@ class SpatialDFBA(Process):
             }
     
     def plot_objective_flux(self, data, time_points, species_names, out_dir='out', filename='objective_flux'):
-    # method implementation
-
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
@@ -207,19 +207,22 @@ class SpatialDFBA(Process):
 
         for i, time in enumerate(time_points):
             for j, species in enumerate(species_names):
-                axs[i, j].imshow(data[species][time], cmap='viridis')
-                axs[i, j].set_title(f"{species} at time {time}")
+                if species in data and time in data[species]:
+                    axs[i, j].imshow(data[species][time], cmap='viridis')
+                    axs[i, j].set_title(f"{species} at time {time}")
                 axs[i, j].set_xticks([])
                 axs[i, j].set_yticks([])
 
-            axs[i, -1].imshow(data['all_species_objective_flux'][time], cmap='viridis')
-            axs[i, -1].set_title(f"Total Biomass at time {time}")
+            if 'all_species_objective_flux' in data and time in data['all_species_objective_flux']:
+                axs[i, -1].imshow(data['all_species_objective_flux'][time], cmap='viridis')
+                axs[i, -1].set_title(f"Total Biomass at time {time}")
             axs[i, -1].set_xticks([])
             axs[i, -1].set_yticks([])
 
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir, filename))
         plt.close()
+
 
 
 def test_spatial_dfba():
@@ -246,7 +249,7 @@ def test_spatial_dfba():
             #     }
             # },
             {
-                "model": '../data/e_coli_core.xml', 
+                "model": '../data/iECW_1372.xml', 
                 "name": "ecoli",
                 "flux_id_map": {
                     "glucose": "EX_glc__D_e",
@@ -285,19 +288,14 @@ def test_spatial_dfba():
 
     sim.update(total_time)
     data = sim.emitter.get_timeseries()
-    print("Data keys:", data.keys())  # Check what keys exist
-    print("Species data:", data["species"])  # Specific check for species data
-
     fields = data["fields"]
     fields.update(data["species"])
-
-    print("Fields after update:", fields.keys())  
-
+    print(data) 
     fba_process.plot_objective_flux(
     data=fields,
     time_points=desired_time_points,
     species_names=[species['name'] for species in config['species_info']],
-    out_dir='./output',
+    out_dir='./out',
     filename='objective_flux_plot'
 )
 
