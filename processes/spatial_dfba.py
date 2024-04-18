@@ -6,7 +6,7 @@ Spatial DFBA
 import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
-from diffusion_field import get_bin_volume, plot_fields_temporal
+from processes.diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
 import matplotlib.pyplot as plt
 import os
@@ -146,7 +146,6 @@ class SpatialDFBA(Process):
         field_states = states['fields']
         updated_biomass = {species_id: np.zeros(self.nbins) for species_id in species_states.keys()}
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
-        all_species_objective_flux = np.zeros(self.nbins)
 
         for species_id, species_array in species_states.items():
             if species_id not in self.models:
@@ -178,58 +177,61 @@ class SpatialDFBA(Process):
                         objective_flux = solution.objective_value
                         biomass_update = objective_flux * species_biomass * timestep
                         updated_biomass[species_id][x, y] += biomass_update
-                        all_species_objective_flux[x, y] += biomass_update
+                        
 
                         for molecule_name in self.molecule_ids:
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep
-        if len(species_states) == 1:
-            only_species_flux = updated_biomass[next(iter(species_states.keys()))]
-            assert np.allclose(only_species_flux, all_species_objective_flux), \
-                "All-species objective flux does not match the single species' flux when only one species is present."
+        # if len(species_states) == 1:
+        #     only_species_flux = updated_biomass[next(iter(species_states.keys()))]
+        #     assert np.allclose(only_species_flux, all_species_objective_flux), \
+        #         "All-species objective flux does not match the single species' flux when only one species is present."
 
         
         return {
             'species': updated_biomass, 
             'fields': updated_fields,
-            'all_species_objective_flux': all_species_objective_flux
             }
     
-    def plot_objective_flux(self, data, time_points, species_names, out_dir='out', filename='objective_flux'):
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+def plot_objective_flux( data, time_points, species_names, out_dir='out', filename='objective_flux'):
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
-        num_species = len(species_names)
-        num_times = len(time_points)
-        fig, axs = plt.subplots(num_times, num_species + 1, figsize=(num_species * 5, num_times * 5), squeeze=False)
+    num_species = len(species_names)
+    num_times = len(time_points)
+    fig, axs = plt.subplots(num_times, num_species + 1, figsize=(num_species * 5, num_times * 5), squeeze=False)
+    all_times= data["time"]
+    for i, time in enumerate(time_points) : 
+        time_index = all_times.index(time)
+        total_biomass = np.zeros_like(data["species"][species_names[0]][0])
+        for j, species_id in enumerate(species_names):
+            if species_id in data["species"]:
+                current_species =  data["species"][species_id][time_index]
+                axs[i, j].imshow(current_species, cmap='viridis')
+                axs[i, j].set_title(f"{species_id} at time {time}") 
+                total_biomass += current_species
+            axs[i, j].set_xticks([])
+            axs[i, j].set_yticks([])
 
-        for i, time in enumerate(time_points):
-            for j, species in enumerate(species_names):
-                if species in data and time in data[species]:
-                    axs[i, j].imshow(data[species][time], cmap='viridis')
-                    axs[i, j].set_title(f"{species} at time {time}")
-                axs[i, j].set_xticks([])
-                axs[i, j].set_yticks([])
+        
+        axs[i, -1].imshow(total_biomass, cmap='viridis')
+        axs[i, -1].set_title(f"Total Biomass at time {time}")
+        axs[i, -1].set_xticks([])
+        axs[i, -1].set_yticks([])
 
-            if 'all_species_objective_flux' in data and time in data['all_species_objective_flux']:
-                axs[i, -1].imshow(data['all_species_objective_flux'][time], cmap='viridis')
-                axs[i, -1].set_title(f"Total Biomass at time {time}")
-            axs[i, -1].set_xticks([])
-            axs[i, -1].set_yticks([])
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, filename))
-        plt.close()
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, filename))
+    plt.close()
 
 
 
 def test_spatial_dfba():
     # Configuration for the spatial environment and simulation
-    total_time = 3
+    total_time = 10
     timestep = 1 
-    desired_time_points = [0, timestep, total_time]
+    desired_time_points = [0, timestep, total_time-1]
     actual_time_points = desired_time_points
     config = {
         'bounds': [3, 3],  # dimensions of the environment
@@ -290,14 +292,14 @@ def test_spatial_dfba():
     data = sim.emitter.get_timeseries()
     fields = data["fields"]
     fields.update(data["species"])
-    print(data) 
-    fba_process.plot_objective_flux(
-    data=fields,
-    time_points=desired_time_points,
-    species_names=[species['name'] for species in config['species_info']],
-    out_dir='./out',
-    filename='objective_flux_plot'
-)
+    #print(data) 
+    plot_objective_flux(
+        data,
+        time_points=desired_time_points,
+        species_names=[species['name'] for species in config['species_info']],
+        out_dir='./out',
+        filename='objective_flux_plot'
+    )
 
 
     plot_fields_temporal(
