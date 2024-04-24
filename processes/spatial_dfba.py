@@ -6,7 +6,7 @@ Spatial DFBA
 import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
-from processes.diffusion_field import get_bin_volume, plot_fields_temporal
+from diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
 import matplotlib.pyplot as plt
 import os
@@ -177,6 +177,7 @@ class SpatialDFBA(Process):
                         objective_flux = solution.objective_value
                         biomass_update = objective_flux * species_biomass * timestep
                         updated_biomass[species_id][x, y] += biomass_update
+                        #here update the fields
                         
 
                         for molecule_name in self.molecule_ids:
@@ -195,35 +196,67 @@ class SpatialDFBA(Process):
             'fields': updated_fields,
             }
     
-def plot_objective_flux( data, time_points, species_names, out_dir='out', filename='objective_flux'):
+def plot_objective_flux(data, time_points, species_names, out_dir='out', filename='objective_flux'):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
     num_species = len(species_names)
     num_times = len(time_points)
     fig, axs = plt.subplots(num_times, num_species + 1, figsize=(num_species * 5, num_times * 5), squeeze=False)
-    all_times= data["time"]
-    for i, time in enumerate(time_points) : 
-        time_index = all_times.index(time)
-        total_biomass = np.zeros_like(data["species"][species_names[0]][0])
+    
+    # Calculate global min and max for each species and total biomass
+    global_min = [np.inf] * (num_species + 1)  # +1 for total biomass
+    global_max = [-np.inf] * (num_species + 1)
+
+    # Precompute global min/max for species and total biomass
+    for time in time_points:
+        time_index = data["time"].index(time)
+        total_biomass = np.zeros_like(data["species"][species_names[0]][time_index])
+        
         for j, species_id in enumerate(species_names):
-            if species_id in data["species"]:
-                current_species =  data["species"][species_id][time_index]
-                axs[i, j].imshow(current_species, cmap='viridis')
-                axs[i, j].set_title(f"{species_id} at time {time}") 
-                total_biomass += current_species
+            current_species = data["species"][species_id][time_index]
+            total_biomass += current_species
+            global_min[j] = min(global_min[j], np.min(current_species))
+            global_max[j] = max(global_max[j], np.max(current_species))
+        
+        # Update total biomass global min and max
+        global_min[-1] = min(global_min[-1], np.min(total_biomass))
+        global_max[-1] = max(global_max[-1], np.max(total_biomass))
+    
+    # Plotting each species and total biomass for each time
+    for i, time in enumerate(time_points):
+        time_index = data["time"].index(time)
+        total_biomass = np.zeros_like(data["species"][species_names[0]][time_index])
+        
+        for j, species_id in enumerate(species_names):
+            current_species = data["species"][species_id][time_index]
+            total_biomass += current_species
+            im = axs[i, j].imshow(current_species, cmap='viridis', vmin=global_min[j], vmax=global_max[j])
+            if i == 0:  # Set title only for the first row
+                axs[i, j].set_title(species_id) 
             axs[i, j].set_xticks([])
             axs[i, j].set_yticks([])
+            if i == 0:  # Add colorbar only in the first row
+                plt.colorbar(im, ax=axs[i, j], fraction=0.046, pad=0.04)
 
+            if j == 0:  # Add time label to the leftmost column
+                axs[i, j].set_ylabel(f'Time {time}', fontsize=12)
         
-        axs[i, -1].imshow(total_biomass, cmap='viridis')
-        axs[i, -1].set_title(f"Total Biomass at time {time}")
+        # Plot total biomass in the last column
+        im = axs[i, -1].imshow(total_biomass, cmap='viridis', vmin=global_min[-1], vmax=global_max[-1])
+        if i == 0:  # Set title only for the first row
+            axs[i, -1].set_title("Total Biomass")
         axs[i, -1].set_xticks([])
         axs[i, -1].set_yticks([])
+        if i == 0:  # Add colorbar only in the first row
+            plt.colorbar(im, ax=axs[i, -1], fraction=0.046, pad=0.04)
 
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, filename))
     plt.close()
+
+
+
 
 
 
