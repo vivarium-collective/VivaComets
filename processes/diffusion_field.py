@@ -33,19 +33,20 @@ def get_bin_volume(bin_size):
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [10, 10],  # cm
+        'bounds': [10, 10],
         'nbins': [10, 10],
-        'molecules': [
-            'glucose',
-            'oxygen'
-        ],
+        'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas'],
         'default_diffusion_dt': 0.001,
-        'default_diffusion_rate': 2E-5,  # cm^2/s, set to the highest diffusion coefficient (oxygen)
+        'default_diffusion_rate': 2E-5,
         'diffusion': {
-            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
-            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s #TODO move it to 
+            'glucose': 6.7E-1,
+            'oxygen': 2.0E-2,
         },
+        'advection': {
+            'glucose': (0.01, 0.01),  
+            'oxygen': (0.01, 0.01),   
+        }
     }
 
     def __init__(self, parameters=None):
@@ -63,7 +64,10 @@ class DiffusionField(Process):
             mol_id: diff_rate / dx2_dy2_dz2
             for mol_id, diff_rate in self.parameters['diffusion'].items()
         }
-
+        self.advection_vectors = {
+            mol_id: self.parameters['advection'].get(mol_id, (0, 0))
+            for mol_id in self.molecule_ids
+        }
     
 
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
@@ -142,8 +146,9 @@ class DiffusionField(Process):
         fields_new = copy.deepcopy(fields)
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
+            advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
             if np.var(field) > 0:  # If field is not uniform
-                fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate)
+                fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector)
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
         return {'fields': delta_fields}
      
@@ -159,18 +164,23 @@ class DiffusionField(Process):
     def random_field(self):
         return np.random.rand(*self.nbins)
 
-    def diffuse(self, field, timestep, diffusion_rate):
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector):
         if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
                                          [0,  1, 0]])
+            gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
+            gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
+            
         else:
             raise ValueError('Field must be 1D, 2D, or 3D')
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            result = convolve(field, laplacian_kernel, mode='reflect') 
-            field += diffusion_rate * dt * result  #mode constant cval=0.0 ,try reflect
+            laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate
+            grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
+            grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
+            field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field
 
@@ -255,9 +265,13 @@ def test_fields():
         'nbins': [5, 5],
         'molecules': ['glucose', 'oxygen'], 
         'diffusion': {
-            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  TODO should find the current rate for cm^3
+            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  
             'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s 
         },
+        'advection': {
+            'glucose': (0.01, 0.01),  # Advection vector for glucose
+            'oxygen': (0.01, 0.01),   # Advection vector for oxygen
+        }
     }
     Diffusion_field = DiffusionField(config) 
     initial_state = Diffusion_field.initial_state({'random': 1.0})
