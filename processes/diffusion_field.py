@@ -33,8 +33,8 @@ def get_bin_volume(bin_size):
 
 class DiffusionField(Process):
     defaults = {
-        'bounds': [10, 10],
-        'nbins': [10, 10],
+        'bounds': [20, 20],
+        'nbins': [20, 20],
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas'],
         'default_diffusion_dt': 0.001,
@@ -270,10 +270,10 @@ def plot_fields_temporal(
 
 
 def test_fields():
-    total_time = 20
+    total_time = 200
     config = {
-        'bounds': [5, 5],
-        'nbins': [5, 5],
+        'bounds': [20, 20],
+        'nbins': [20, 20],
         'molecules': ['glucose', 'oxygen'], 
         'diffusion': {
             'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  
@@ -303,7 +303,7 @@ def test_fields():
     sim.update(total_time)
     # Get the results
     data = sim.emitter.get_timeseries()  #TODO add a line and make assert to check, like biomass should not decreased as the times go
-    time_list = [0, 1, int(total_time/4), int(total_time/2), total_time]
+    time_list = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     # Inside test_fields function
     plot_fields_temporal(
         fields_data=data['fields'],

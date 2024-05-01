@@ -138,8 +138,6 @@ class SpatialDFBA(Process):
             return species_info['kinetic_params'].get(molecule_name)
         return None
 
-    #TODO from the objective flux we need to get
-    #TODO go through exchange fluxes in the field and remove it from the environment
     #calculate FBA for this species in this location
     def next_update(self, timestep, states):
         species_states = states['species']
@@ -185,11 +183,6 @@ class SpatialDFBA(Process):
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep
-        # if len(species_states) == 1:
-        #     only_species_flux = updated_biomass[next(iter(species_states.keys()))]
-        #     assert np.allclose(only_species_flux, all_species_objective_flux), \
-        #         "All-species objective flux does not match the single species' flux when only one species is present."
-
         
         return {
             'species': updated_biomass, 
@@ -262,13 +255,13 @@ def plot_objective_flux(data, time_points, species_names, out_dir='out', filenam
 
 def test_spatial_dfba():
     # Configuration for the spatial environment and simulation
-    total_time = 10
+    total_time = 50
     timestep = 1 
-    desired_time_points = [0, timestep, total_time-1]
+    desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
     config = {
-        'bounds': [3, 3],  # dimensions of the environment
-        'nbins': [3, 3],   # division into bins
+        'bounds': [20, 20],  # dimensions of the environment
+        'nbins': [20, 20],   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             # {

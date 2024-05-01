@@ -1,9 +1,10 @@
 import sys
 sys.path.append('/Users/amin/Desktop/VivaComets')
-# import os
-# os.chdir('/Users/amin/Desktop/VivaComets')
+import os
+os.chdir('/Users/amin/Desktop/VivaComets')
 import numpy as np
 from processes.diffusion_field import DiffusionField
+
 from processes.spatial_dfba import SpatialDFBA, plot_objective_flux
 from vivarium.core.engine import Engine
 
@@ -11,8 +12,8 @@ from vivarium.core.engine import Engine
 
 def test_comets():
   
-    bounds = [3, 3]
-    nbins = [3, 3]  
+    bounds = [20, 20]
+    nbins = [20, 20]  
     molecules = ['glucose', 'oxygen']
     species_info = [{
         "name": "ecoli",
@@ -63,7 +64,7 @@ def test_comets():
     )
 
    
-    total_time = 10 
+    total_time = 60 
     sim.update(total_time)
 
     data = sim.emitter.get_timeseries()
