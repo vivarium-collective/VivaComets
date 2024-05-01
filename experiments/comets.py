@@ -3,14 +3,12 @@ sys.path.append('/Users/amin/Desktop/VivaComets')
 # import os
 # os.chdir('/Users/amin/Desktop/VivaComets')
 import numpy as np
-from processes.diffusion_field import DiffusionField
+from processes.diffusion_field import DiffusionField, plot_fields_temporal
 from processes.spatial_dfba import SpatialDFBA, plot_objective_flux
 from vivarium.core.engine import Engine
 
 
-
 def test_comets():
-  
     bounds = [3, 3]
     nbins = [3, 3]  
     molecules = ['glucose', 'oxygen']
@@ -67,7 +65,7 @@ def test_comets():
     sim.update(total_time)
 
     data = sim.emitter.get_timeseries()
-    desired_time_points=[1,3,total_time-1]
+    desired_time_points = [1, 3, total_time-1]
     plot_objective_flux(
         data,
         time_points=desired_time_points,
@@ -75,6 +73,15 @@ def test_comets():
         out_dir='./out',
         filename='Comets_objective_flux_plot'
     )
+
+    plot_fields_temporal(
+        data['fields'],
+        desired_time_points=desired_time_points,
+        actual_time_points=data['time'],
+        plot_fields=["glucose", "oxygen"],
+        filename='comets_fields',
+    )
+
 
 if __name__ == '__main__':
     test_comets()

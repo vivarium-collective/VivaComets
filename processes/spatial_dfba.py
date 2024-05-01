@@ -6,7 +6,7 @@ Spatial DFBA
 import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
-from diffusion_field import get_bin_volume, plot_fields_temporal
+from processes.diffusion_field import get_bin_volume, plot_fields_temporal
 from cobra.io import read_sbml_model
 import matplotlib.pyplot as plt
 import os
@@ -195,8 +195,15 @@ class SpatialDFBA(Process):
             'species': updated_biomass, 
             'fields': updated_fields,
             }
-    
-def plot_objective_flux(data, time_points, species_names, out_dir='out', filename='objective_flux'):
+
+
+def plot_objective_flux(
+        data,
+        time_points,
+        species_names,
+        out_dir='out',
+        filename='objective_flux'
+):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
@@ -254,10 +261,6 @@ def plot_objective_flux(data, time_points, species_names, out_dir='out', filenam
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, filename))
     plt.close()
-
-
-
-
 
 
 def test_spatial_dfba():
