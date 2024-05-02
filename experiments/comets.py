@@ -3,14 +3,16 @@ sys.path.append('/Users/amin/Desktop/VivaComets')
 # import os
 # os.chdir('/Users/amin/Desktop/VivaComets')
 import numpy as np
-from processes.diffusion_field import DiffusionField, plot_fields_temporal
-from processes.spatial_dfba import SpatialDFBA, plot_objective_flux
+from processes.diffusion_field import DiffusionField
+from processes.spatial_dfba import SpatialDFBA
+from plots.field import plot_objective_flux, plot_fields_temporal
 from vivarium.core.engine import Engine
 
 
 def test_comets():
-    bounds = [3, 3]
-    nbins = [3, 3]  
+    total_time = 10
+    bounds = [5, 5]
+    nbins = [5, 5]
     molecules = ['glucose', 'oxygen']
     species_info = [{
         "name": "ecoli",
@@ -32,16 +34,17 @@ def test_comets():
         'molecules': molecules,
     }
 
-    # processes
+    # create the two processes
     diffusion_field = DiffusionField(parameters=shared_params)
     spatial_dfba = SpatialDFBA(parameters={**shared_params, 'species_info': species_info})
 
+    # set the initial state
     initial_state = {
         'fields': {mol: np.ones(nbins) * 5.0 for mol in molecules},
         'species': {'ecoli': np.ones(nbins) * 1.0},
     }
 
-
+    # make the composite simulation and run it
     sim = Engine(
         processes={
             'diffusion_field': diffusion_field,
@@ -59,11 +62,9 @@ def test_comets():
         },
         initial_state=initial_state
     )
-
-   
-    total_time = 10 
     sim.update(total_time)
 
+    # retrieve the results and plot them
     data = sim.emitter.get_timeseries()
     desired_time_points = [1, 3, total_time-1]
     plot_objective_flux(
