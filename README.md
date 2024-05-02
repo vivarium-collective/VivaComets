@@ -1,17 +1,18 @@
 
-# VivaComets
+# Vivarium-COMETS
 
 ## Description
-VivaComets is a cutting-edge project that leverages the capabilities of the Vivarium package to implement the Comets methodology. This project aims to provide a comprehensive framework for simulating and analyzing complex biological systems in a specialized environment, enhancing our understanding of dynamic interactions within various environments.
+Vivarium-COMETS is a multiscale modeling project that leverages the capabilities of the Vivarium package to implement the 
+COMETS methodology. This project aims to provide a comprehensive framework for simulating and analyzing complex 
+microbial systems in spatial environments, enhancing our understanding of dynamic interactions within various 
+environments.
 
 ## Features
-- **Implementation of the Comets Methodology Using Vivarium:** Utilizes the robust features of Vivarium to bring the Comets methodology to life, offering a unique approach to simulating biological systems.
-- **Tools for Simulating Complex, Dynamic Multidimensional Biological Systems:** Offers a suite of tools designed to model and simulate intricate biological systems across multiple dimensions, providing insights into their behavior and interactions.
+- **Implementation of the COMETS Methodology Using Vivarium:** Utilizes the robust features of Vivarium to bring the COMETS methodology to life.
 - **Analysis and Visualization Capabilities:** Includes advanced capabilities for analyzing system interactions, with a focus on Flux Balance Analysis (FBA). This allows for the detailed examination and visualization of metabolic fluxes within the system, facilitating a deeper understanding of the underlying biological processes.
 
 
 ## MIT License
-
 
 Copyright (c) 2024 Vivarium Lab
 
