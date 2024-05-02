@@ -26,19 +26,16 @@ setup(
         "Operating System :: OS Independent",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.9",
     install_requires=[
         # List your package dependencies here
-        "vivarium-core",
+        "vivarium-core>=1.6.4",
         "numpy",
         "cobra",
-        "Pint>=0.18",
+        "Pint==0.23",
     ],
 )

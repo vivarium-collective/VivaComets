@@ -3,13 +3,17 @@
 Spatial DFBA
 ============
 """
+import os
 import numpy as np
+from matplotlib import pyplot as plt
+
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
-from diffusion_field import get_bin_volume, plot_fields_temporal
+
+from plots.field import plot_objective_flux, plot_fields_temporal
+from processes.diffusion_field import get_bin_volume
 from cobra.io import read_sbml_model
-import matplotlib.pyplot as plt
-import os
+
 
 class SpatialDFBA(Process):
     """
@@ -21,7 +25,7 @@ class SpatialDFBA(Process):
     - bounds: the size of the environment in each dimension
     - nbins: the number of bins in each dimension
     - molecules: the list of molecules in the environment
-    - species: a dictionary of species names and paths to their FBA models
+    - species_info: a list of dictionaries of species names and paths to their FBA models
     """
     defaults = {
         'bounds': [3, 3],  # cm
@@ -30,11 +34,11 @@ class SpatialDFBA(Process):
             'glucose',
             'oxygen'
         ],
-        # 'species': {
-        #     'Alteromonas': '../data/Alteromonas_Model.xml'
-        # },
         'species_info': [ 
-            {'name': 'Alteromonas', 'model': '../data/Alteromonas_Model.xml'}
+            {
+                'name': 'Alteromonas',
+                'model': '../data/Alteromonas_Model.xml'
+            }
         ],
     }
 
@@ -43,13 +47,15 @@ class SpatialDFBA(Process):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = {info['name']: info['model'] for info in self.parameters.get('species_info', [])}
-        #spatial setting
+
+        # spatial setting
         self.bounds = self.parameters['bounds']
         assert len(self.bounds) == 2, "This process ONLY supports 2D"
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         self.bin_volume = get_bin_volume(self.bin_size)
-        #load FBA Model
+
+        # load FBA Model
         self.models = {}
         self.flux_id_maps = {}
         self.kinetic_params = {}
@@ -96,7 +102,6 @@ class SpatialDFBA(Process):
 
         return {'fields': fields, 'species': species}
 
-
     def ports_schema(self):
         schema = {
             'species': {},
@@ -134,7 +139,6 @@ class SpatialDFBA(Process):
 
         return schema
 
-
     def get_reaction_id(self, molecule, species_name):
         # Use species_name to fetch the correct flux_id_map and then map molecule to reaction ID
         flux_id_map = self.flux_id_maps.get(species_name, {})
@@ -154,8 +158,15 @@ class SpatialDFBA(Process):
 
     #calculate FBA for this species in this location
     def next_update(self, timestep, states):
+        """
+        The main process update method. This method is called by the Vivarium engine at each timestep.
+        """
+
+        # get the states
         species_states = states['species']
         field_states = states['fields']
+
+        # prepare update dicts
         updated_biomass = {species_id: np.zeros(self.nbins) for species_id in species_states.keys()}
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
 
@@ -181,7 +192,7 @@ class SpatialDFBA(Process):
                             if reaction_id:
                                 reaction = species_model.reactions.get_by_id(reaction_id)
                                 initial_lower_bound = reaction.lower_bound  # Store the initial lower bound
-                                # Update the reaction lower bound with the more restrictive of the calculated or initial rate
+                                # Update the reaction lower bound to the uptake rate
                                 reaction.lower_bound = max(initial_lower_bound, -uptake_rate)
 
                     solution = species_model.optimize()
@@ -189,9 +200,8 @@ class SpatialDFBA(Process):
                         objective_flux = solution.objective_value
                         biomass_update = objective_flux * species_biomass * timestep
                         updated_biomass[species_id][x, y] += biomass_update
-                        #here update the fields
-                        
 
+                        # update the fields
                         for molecule_name in self.molecule_ids:
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
@@ -202,6 +212,7 @@ class SpatialDFBA(Process):
             'species': updated_biomass, 
             'fields': updated_fields,
             }
+
     
 def plot_objective_flux(data, time_points, species_names, out_dir='out', filename='objective_flux'):
     if not os.path.exists(out_dir):
@@ -263,10 +274,11 @@ def plot_objective_flux(data, time_points, species_names, out_dir='out', filenam
     plt.close()
 
 
-
-def test_spatial_dfba():
+def test_spatial_dfba(
+        total_time=10,
+        nbins=[10, 10],
+):
     # Configuration for the spatial environment and simulation
-    total_time = 10
     timestep = 1
     desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
@@ -280,10 +292,9 @@ def test_spatial_dfba():
         }
     }
 
-
     config = {
         'bounds': [10, 10],  # dimensions of the environment
-        'nbins': [10, 10],   # division into bins
+        'nbins': nbins,   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             # {
@@ -313,11 +324,13 @@ def test_spatial_dfba():
         ]
     }
 
-
+    # create the process
     fba_process = SpatialDFBA(config)
 
     # initial state
     initial_state = fba_process.initial_state(initial_state_config)
+
+    # make the simulation and run it
     sim = Engine(
         initial_state=initial_state,
         processes={'fba_process': fba_process},
@@ -327,12 +340,15 @@ def test_spatial_dfba():
             'dimensions': ('dimensions',),
         }}
     )
-
     sim.update(total_time)
+
+    # get the data
     data = sim.emitter.get_timeseries()
     fields = data["fields"]
     fields.update(data["species"])
-    #print(data) 
+    #print(data)
+
+    # plots
     plot_objective_flux(
         data,
         time_points=desired_time_points,
@@ -341,15 +357,14 @@ def test_spatial_dfba():
         filename='objective_flux_plot'
     )
 
-
     plot_fields_temporal(
         fields_data=fields, 
         desired_time_points=desired_time_points, 
         actual_time_points=actual_time_points,
-        plot_fields = ["glucose", "oxygen", "ecoli"],
-        molecule_colormaps= {"glucose": "Blues" , "oxygen": "Greens", "ecoli": "Purples"}
+        plot_fields=["glucose", "oxygen", "ecoli"],
+        molecule_colormaps={"glucose": "Blues", "oxygen": "Greens", "ecoli": "Purples"},
+        filename='spatial_dfba_test',
         )
-
 
 
 if __name__ == '__main__':

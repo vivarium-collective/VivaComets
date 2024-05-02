@@ -11,8 +11,9 @@ import numpy as np
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 from scipy.ndimage import convolve
-import matplotlib.pyplot as plt
 import os
+
+from plots.field import plot_fields_temporal
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
@@ -32,6 +33,10 @@ def get_bin_volume(bin_size):
 
 
 class DiffusionField(Process):
+    """
+    DiffusionField Process
+
+    """
     defaults = {
         'bounds': [20, 20],
         'nbins': [20, 20],
@@ -50,8 +55,8 @@ class DiffusionField(Process):
         'sinking': {
             'glucose': -0.01,  # if the value is positive it goes up
             'oxygen': -0.02,
-            }
-            }
+        }
+    }
 
     def __init__(self, parameters=None):
         super().__init__(parameters)
@@ -59,7 +64,7 @@ class DiffusionField(Process):
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
-        assert len(self.bounds) == 2, "Proccess only support 2D"
+        assert len(self.bounds) == 2, "Process only support 2D"
         diffusion_rate = self.parameters['default_diffusion_rate']
         dx, dy = self.bin_size  
         dx2_dy2 = get_bin_volume(self.bin_size)
@@ -191,70 +196,6 @@ class DiffusionField(Process):
             field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field
-    
-    
-def plot_fields_temporal(
-        fields_data,
-        desired_time_points,
-        actual_time_points,
-        out_dir='out',
-        filename='fields_at_z', 
-        molecule_colormaps = {},
-        plot_fields = ["glucose" , "oxygen"]
-):
-    
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir, exist_ok=True)
-   
-    # Convert desired and actual time points to float for accurate indexing
-    desired_time_points = [float(time) for time in desired_time_points]
-    actual_time_points = [float(time) for time in actual_time_points]
-    num_molecules = len(plot_fields)
-    num_times = len(desired_time_points)
-    fig, axs = plt.subplots(num_times, num_molecules, figsize=(10, num_times * 5), squeeze=False)
-    
-    # Calculate global min/max for each molecule across all timepoints
-    global_min_max = {}
-    for molecule in fields_data.keys() :
-        if molecule not in plot_fields:
-            continue
-        all_data = np.concatenate([np.array(times_data) for times_data in fields_data[molecule]], axis=0)
-        global_min_max[molecule] = (np.min(all_data), np.max(all_data))
-    
-
-    for mol_idx, molecule in enumerate(fields_data.keys()):
-        if molecule not in plot_fields:
-            continue
-        times_data = fields_data[molecule]
-        for time_idx, desired_time in enumerate(desired_time_points):
-            if desired_time in actual_time_points:
-                actual_idx = actual_time_points.index(desired_time)
-                data_array = np.array(times_data[actual_idx])  # Accessing the time-specific data
-    
-                ax = axs[time_idx, mol_idx]
-                # Use the specified colormap for the molecule
-                cmap = molecule_colormaps.get(molecule, 'Blues')  # Default to 'viridis' if molecule not in dict
-                vmin, vmax = global_min_max[molecule]  # Use global min/max
-                cax = ax.imshow(data_array, cmap=cmap, interpolation='nearest',  vmin=vmin, vmax=vmax)
-
-                # molecule labels for top row
-                if time_idx == 0:
-                    ax.set_title(molecule, fontsize=24)
-
-                # time label for leftmost column
-                if mol_idx == 0:
-                    ax.set_ylabel(f'Time {desired_time}', fontsize=22)
-
-                ax.set_xticks([])
-                ax.set_yticks([])
-                if time_idx == 0:
-                    cb = fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
-                    cb.ax.tick_params(labelsize=10)
-                
-    plt.tight_layout()
-    fig_path = os.path.join(out_dir, filename)
-    fig.savefig(fig_path, bbox_inches='tight')
-    plt.close()
 
 
 def test_fields():
@@ -262,10 +203,10 @@ def test_fields():
     config = {
         'bounds': [20, 20],
         'nbins': [20, 20],
-        'molecules': ['glucose', 'oxygen'], 
+        'molecules': ['glucose', 'oxygen'],
         'diffusion': {
-            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  
-            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s 
+            'glucose': 6.7E-1,     # 6.7E-6,  # cm^2/s
+            'oxygen':  2.0E-2,     # 2.0E-5,  # cm^2/s
         },
         'advection': {
             'glucose': (0.01, 0.01),  # Advection vector for glucose
@@ -276,11 +217,13 @@ def test_fields():
             'oxygen': -0.01,   # Sinks at a rate of 0.01 units per timestep
         }
     }
-    Diffusion_field = DiffusionField(config) 
-    initial_state = Diffusion_field.initial_state({'random': 1.0})
+
+    # create the process and make a simulation
+    diffusion_field = DiffusionField(config)
+    initial_state = diffusion_field.initial_state({'random': 1.0})
     sim = Engine(
         initial_state=initial_state,
-        processes={'diffusion_process': Diffusion_field},
+        processes={'diffusion_process': diffusion_field},
         topology={'diffusion_process': {
             'fields': ('fields',),
             'species': ('species',),
@@ -290,16 +233,16 @@ def test_fields():
     # Run the simulation
     sim.update(total_time)
     # Get the results
-    data = sim.emitter.get_timeseries()  
-    time_list = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
-    # Inside test_fields function
+    data = sim.emitter.get_timeseries()
+    time_list = [0, 1, int(total_time/4), int(total_time/2), total_time]
+
+    # plot the results
     plot_fields_temporal(
         fields_data=data['fields'],
         desired_time_points=time_list,
         actual_time_points=data['time'],
         out_dir='./out',
         filename='Diffusion_test')
-   
 
 
 if __name__ == '__main__':

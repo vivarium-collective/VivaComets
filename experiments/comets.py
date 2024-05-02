@@ -1,19 +1,20 @@
-import sys
-sys.path.append('/Users/amin/Desktop/VivaComets')
-import os
-os.chdir('/Users/amin/Desktop/VivaComets')
+"""
+COMETS Vivarium Composite Simulation
+"""
+
 import numpy as np
 from processes.diffusion_field import DiffusionField
-
-from processes.spatial_dfba import SpatialDFBA, plot_objective_flux
+from processes.spatial_dfba import SpatialDFBA
+from plots.field import plot_objective_flux, plot_fields_temporal
 from vivarium.core.engine import Engine
 
 
+def test_comets(
+        total_time=5,
+        bounds=[4, 4],
+        nbins=[4, 4],
+):
 
-def test_comets():
-  
-    bounds = [20, 20]
-    nbins = [20, 20]  
     molecules = ['glucose', 'oxygen']
     species_info = [{
         "name": "ecoli",
@@ -35,16 +36,17 @@ def test_comets():
         'molecules': molecules,
     }
 
-    # processes
+    # create the two processes
     diffusion_field = DiffusionField(parameters=shared_params)
     spatial_dfba = SpatialDFBA(parameters={**shared_params, 'species_info': species_info})
 
+    # set the initial state
     initial_state = {
         'fields': {mol: np.ones(nbins) * 5.0 for mol in molecules},
         'species': {'ecoli': np.ones(nbins) * 1.0},
     }
 
-
+    # make the composite simulation and run it
     sim = Engine(
         processes={
             'diffusion_field': diffusion_field,
@@ -62,13 +64,11 @@ def test_comets():
         },
         initial_state=initial_state
     )
-
-   
-    total_time = 60 
     sim.update(total_time)
 
+    # retrieve the results and plot them
     data = sim.emitter.get_timeseries()
-    desired_time_points=[1,3,total_time-1]
+    desired_time_points = [1, 3, total_time-1]
     plot_objective_flux(
         data,
         time_points=desired_time_points,
@@ -77,5 +77,18 @@ def test_comets():
         filename='Comets_objective_flux_plot'
     )
 
+    plot_fields_temporal(
+        data['fields'],
+        desired_time_points=desired_time_points,
+        actual_time_points=data['time'],
+        plot_fields=["glucose", "oxygen"],
+        filename='comets_fields',
+    )
+
+
 if __name__ == '__main__':
-    test_comets()
+    test_comets(
+        total_time=10,
+        bounds=[10, 10],
+        nbins=[10, 10],
+     )
