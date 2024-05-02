@@ -38,8 +38,8 @@ class DiffusionField(Process):
 
     """
     defaults = {
-        'bounds': [10, 10],
-        'nbins': [10, 10],
+        'bounds': [20, 20],
+        'nbins': [20, 20],
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas'],
         'default_diffusion_dt': 0.001,
@@ -210,11 +210,11 @@ class DiffusionField(Process):
 
 
 def test_fields():
-    total_time = 20
+    total_time = 200
     config = {
-        'bounds': [5, 5],
-        'nbins': [10, 10],
-        'molecules': ['glucose', 'oxygen'], 
+        'bounds': [20, 20],
+        'nbins': [20, 20],
+        'molecules': ['glucose', 'oxygen'],
         'diffusion': {
             'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  
             'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s 

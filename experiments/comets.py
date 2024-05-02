@@ -1,7 +1,7 @@
-import sys
-sys.path.append('/Users/amin/Desktop/VivaComets')
-# import os
-# os.chdir('/Users/amin/Desktop/VivaComets')
+"""
+COMETS Vivarium Composite Simulation
+"""
+
 import numpy as np
 from processes.diffusion_field import DiffusionField
 from processes.spatial_dfba import SpatialDFBA
