@@ -3,7 +3,10 @@
 Spatial DFBA
 ============
 """
+import os
 import numpy as np
+from matplotlib import pyplot as plt
+
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 
@@ -65,25 +68,39 @@ class SpatialDFBA(Process):
             self.kinetic_params[species_name] = species['kinetic_params']
     
     def initial_state(self, config=None):
+        if config is None:
+            config = {}
+            print("Warning: No configuration provided, initializing to default zero values.")
 
-        # update fields and species with initial values from config
-        fields = {molecule: 0.0 for molecule in self.molecule_ids}
-        species = {species: 0.0 for species in self.species_ids}
-        fields.update(config.get('fields', {}))
-        species.update(config.get('species', {}))
+        fields = {}
+        species = {}
+        shape = tuple(self.nbins)
 
-        return {
-            'fields': {
-                molecule: np.ones(self.nbins) * concentration
-                for molecule, concentration in fields.items()
-                if molecule in self.molecule_ids
-            },
-            'species': {
-                name: np.ones(self.nbins) * biomass
-                for name, biomass in species.items()
-                if name in self.species_ids
-            }
-        }
+        # Initialize fields (molecules)
+        for molecule in self.molecule_ids:
+            if 'random' in config and molecule in config['random']:
+                max_value = config['random'][molecule]
+                fields[molecule] = np.random.rand(*shape) * max_value
+            elif 'uniform' in config and molecule in config['uniform']:
+                value = config['uniform'][molecule]
+                fields[molecule] = np.full(shape, value)
+            else:
+                print(f"No specific initialization for molecule '{molecule}', defaulting to zero.")
+                fields[molecule] = np.zeros(shape)
+
+        # Initialize species (biomass)
+        for spec in self.species_ids:
+            if 'random' in config and 'species' in config['random'] and spec in config['random']['species']:
+                max_value = config['random']['species'][spec]
+                species[spec] = np.random.rand(*shape) * max_value
+            elif 'uniform' in config and 'species' in config['uniform'] and spec in config['uniform']['species']:
+                value = config['uniform']['species'][spec]
+                species[spec] = np.full(shape, value)
+            else:
+                print(f"No specific initialization for species '{spec}', defaulting to zero.")
+                species[spec] = np.zeros(shape)
+
+        return {'fields': fields, 'species': species}
 
     def ports_schema(self):
         schema = {
@@ -196,16 +213,88 @@ class SpatialDFBA(Process):
             'fields': updated_fields,
             }
 
+    
+def plot_objective_flux(data, time_points, species_names, out_dir='out', filename='objective_flux'):
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
-def test_spatial_dfba():
+    num_species = len(species_names)
+    num_times = len(time_points)
+    fig, axs = plt.subplots(num_times, num_species + 1, figsize=(num_species * 5, num_times * 5), squeeze=False)
+    
+    # Calculate global min and max for each species and total biomass
+    global_min = [np.inf] * (num_species + 1)  # +1 for total biomass
+    global_max = [-np.inf] * (num_species + 1)
+
+    # Precompute global min/max for species and total biomass
+    for time in time_points:
+        time_index = data["time"].index(time)
+        total_biomass = np.zeros_like(data["species"][species_names[0]][time_index])
+        
+        for j, species_id in enumerate(species_names):
+            current_species = data["species"][species_id][time_index]
+            total_biomass += current_species
+            global_min[j] = min(global_min[j], np.min(current_species))
+            global_max[j] = max(global_max[j], np.max(current_species))
+        
+        # Update total biomass global min and max
+        global_min[-1] = min(global_min[-1], np.min(total_biomass))
+        global_max[-1] = max(global_max[-1], np.max(total_biomass))
+    
+    # Plotting each species and total biomass for each time
+    for i, time in enumerate(time_points):
+        time_index = data["time"].index(time)
+        total_biomass = np.zeros_like(data["species"][species_names[0]][time_index])
+        
+        for j, species_id in enumerate(species_names):
+            current_species = data["species"][species_id][time_index]
+            total_biomass += current_species
+            im = axs[i, j].imshow(current_species, cmap='viridis', vmin=global_min[j], vmax=global_max[j])
+            if i == 0:  # Set title only for the first row
+                axs[i, j].set_title(species_id) 
+            axs[i, j].set_xticks([])
+            axs[i, j].set_yticks([])
+            if i == 0:  # Add colorbar only in the first row
+                plt.colorbar(im, ax=axs[i, j], fraction=0.046, pad=0.04)
+
+            if j == 0:  # Add time label to the leftmost column
+                axs[i, j].set_ylabel(f'Time {time}', fontsize=12)
+        
+        # Plot total biomass in the last column
+        im = axs[i, -1].imshow(total_biomass, cmap='viridis', vmin=global_min[-1], vmax=global_max[-1])
+        if i == 0:  # Set title only for the first row
+            axs[i, -1].set_title("Total Biomass")
+        axs[i, -1].set_xticks([])
+        axs[i, -1].set_yticks([])
+        if i == 0:  # Add colorbar only in the first row
+            plt.colorbar(im, ax=axs[i, -1], fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, filename))
+    plt.close()
+
+
+def test_spatial_dfba(
+        total_time=10,
+        nbins=[10, 10],
+):
     # Configuration for the spatial environment and simulation
-    total_time = 50
-    timestep = 1 
+    timestep = 1
     desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
+    initial_state_config = {
+        'random': {
+            'glucose': 5.0,  # Max random value for glucose
+            'oxygen': 2.0,   # Max random value for oxygen
+            'species': {
+                'ecoli': 0.5   # Max random value for E. coli biomass
+            }
+        }
+    }
+
     config = {
-        'bounds': [20, 20],  # dimensions of the environment
-        'nbins': [20, 20],   # division into bins
+        'bounds': [10, 10],  # dimensions of the environment
+        'nbins': nbins,   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             # {
@@ -239,14 +328,7 @@ def test_spatial_dfba():
     fba_process = SpatialDFBA(config)
 
     # initial state
-    initial_state = fba_process.initial_state({
-        'fields': {
-            'glucose': 5.0
-        },
-        'species': {
-            'ecoli': 1.0
-        }
-    })
+    initial_state = fba_process.initial_state(initial_state_config)
 
     # make the simulation and run it
     sim = Engine(

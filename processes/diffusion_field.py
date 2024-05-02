@@ -3,7 +3,7 @@
 Diffusion Field 
 ===============
 
-Diffuses and decays molecular concentrations in a 3D field.
+Diffuses and decays molecular concentrations in a 2D field.
 """
 
 import copy
@@ -67,10 +67,10 @@ class DiffusionField(Process):
         assert len(self.bounds) == 2, "Process only support 2D"
         diffusion_rate = self.parameters['default_diffusion_rate']
         dx, dy = self.bin_size  
-        dx2_dy2_dz2 = get_bin_volume(self.bin_size)
-        self.diffusion_rate = diffusion_rate / dx2_dy2_dz2
+        dx2_dy2 = get_bin_volume(self.bin_size)
+        self.diffusion_rate = diffusion_rate / dx2_dy2
         self.molecule_specific_diffusion = {
-            mol_id: diff_rate / dx2_dy2_dz2
+            mol_id: diff_rate / dx2_dy2
             for mol_id, diff_rate in self.parameters['diffusion'].items()
         }
         self.advection_vectors = {
@@ -85,7 +85,6 @@ class DiffusionField(Process):
 
     def initial_state(self, config=None):
         """get initial state of the fields
-
         Args:
             * config (dict): with optional keys "random" or "uniform".
                 * "random" key maps to a maximum value for the field, which gets filled with values between [0, max].
@@ -187,26 +186,16 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate
+            laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate   #TODO put bondary 
             grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
             grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
             if sinking_rate != 0:
                 vertical_shift = int(sinking_rate * dt / self.bin_size[1])  # Vertical shift in bins
                 if vertical_shift != 0:
                     field = np.roll(field, shift=vertical_shift, axis=0)
-
             field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field
-
-    def diffuse_fields(self, fields, timestep):  #actual computing of diffusing of each molecule 
-        """ diffuse fields in a fields dictionary """
-        for mol_id, field in fields.items():
-            diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
-            # run diffusion if molecule field is not uniform
-            if len(set(field.flatten())) != 1:  
-                fields[mol_id] = self.diffuse(field, timestep, diffusion_rate)
-        return fields
 
 
 def test_fields():
@@ -216,8 +205,8 @@ def test_fields():
         'nbins': [20, 20],
         'molecules': ['glucose', 'oxygen'],
         'diffusion': {
-            'glucose': 6.7E-1, #6.7E-6,  # cm^2/s  
-            'oxygen':  2.0E-2,     #2.0E-5,   # cm^2/s 
+            'glucose': 6.7E-1,     # 6.7E-6,  # cm^2/s
+            'oxygen':  2.0E-2,     # 2.0E-5,  # cm^2/s
         },
         'advection': {
             'glucose': (0.01, 0.01),  # Advection vector for glucose
@@ -245,7 +234,6 @@ def test_fields():
     sim.update(total_time)
     # Get the results
     data = sim.emitter.get_timeseries()
-    # TODO add a line and make assert to check, like biomass should not decreased as the times go
     time_list = [0, 1, int(total_time/4), int(total_time/2), total_time]
 
     # plot the results
