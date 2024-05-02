@@ -62,26 +62,40 @@ class SpatialDFBA(Process):
             self.kinetic_params[species_name] = species['kinetic_params']
     
     def initial_state(self, config=None):
+        if config is None:
+            config = {}
+            print("Warning: No configuration provided, initializing to default zero values.")
 
-        # update fields and species with initial values from config
-        fields = {molecule: 0.0 for molecule in self.molecule_ids}
-        species = {species: 0.0 for species in self.species_ids}
-        fields.update(config.get('fields', {}))
-        species.update(config.get('species', {}))
+        fields = {}
+        species = {}
+        shape = tuple(self.nbins)
 
-        initial_state = {
-            'fields': {
-                molecule: np.ones(self.nbins) * concentration
-                for molecule, concentration in fields.items()
-                if molecule in self.molecule_ids
-            },
-            'species': {
-                name: np.ones(self.nbins) * biomass
-                for name, biomass in species.items()
-                if name in self.species_ids
-            }
-        }
-        return initial_state
+        # Initialize fields (molecules)
+        for molecule in self.molecule_ids:
+            if 'random' in config and molecule in config['random']:
+                max_value = config['random'][molecule]
+                fields[molecule] = np.random.rand(*shape) * max_value
+            elif 'uniform' in config and molecule in config['uniform']:
+                value = config['uniform'][molecule]
+                fields[molecule] = np.full(shape, value)
+            else:
+                print(f"No specific initialization for molecule '{molecule}', defaulting to zero.")
+                fields[molecule] = np.zeros(shape)
+
+        # Initialize species (biomass)
+        for spec in self.species_ids:
+            if 'random' in config and 'species' in config['random'] and spec in config['random']['species']:
+                max_value = config['random']['species'][spec]
+                species[spec] = np.random.rand(*shape) * max_value
+            elif 'uniform' in config and 'species' in config['uniform'] and spec in config['uniform']['species']:
+                value = config['uniform']['species'][spec]
+                species[spec] = np.full(shape, value)
+            else:
+                print(f"No specific initialization for species '{spec}', defaulting to zero.")
+                species[spec] = np.zeros(shape)
+
+        return {'fields': fields, 'species': species}
+
 
     def ports_schema(self):
         schema = {
@@ -250,18 +264,26 @@ def plot_objective_flux(data, time_points, species_names, out_dir='out', filenam
 
 
 
-
-
-
 def test_spatial_dfba():
     # Configuration for the spatial environment and simulation
-    total_time = 50
-    timestep = 1 
+    total_time = 10
+    timestep = 1
     desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
+    initial_state_config = {
+        'random': {
+            'glucose': 5.0,  # Max random value for glucose
+            'oxygen': 2.0,   # Max random value for oxygen
+            'species': {
+                'ecoli': 0.5   # Max random value for E. coli biomass
+            }
+        }
+    }
+
+
     config = {
-        'bounds': [20, 20],  # dimensions of the environment
-        'nbins': [20, 20],   # division into bins
+        'bounds': [10, 10],  # dimensions of the environment
+        'nbins': [10, 10],   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             # {
@@ -295,15 +317,7 @@ def test_spatial_dfba():
     fba_process = SpatialDFBA(config)
 
     # initial state
-    initial_state = fba_process.initial_state({
-        'fields': {
-            'glucose': 5.0
-        },
-        'species': {
-            'ecoli': 1.0
-        }
-    })
-
+    initial_state = fba_process.initial_state(initial_state_config)
     sim = Engine(
         initial_state=initial_state,
         processes={'fba_process': fba_process},
