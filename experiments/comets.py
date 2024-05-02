@@ -9,10 +9,12 @@ from plots.field import plot_objective_flux, plot_fields_temporal
 from vivarium.core.engine import Engine
 
 
-def test_comets():
-    total_time = 10
-    bounds = [5, 5]
-    nbins = [5, 5]
+def test_comets(
+        total_time=5,
+        bounds=[4, 4],
+        nbins=[4, 4],
+):
+
     molecules = ['glucose', 'oxygen']
     species_info = [{
         "name": "ecoli",
@@ -85,4 +87,8 @@ def test_comets():
 
 
 if __name__ == '__main__':
-    test_comets()
+    test_comets(
+        total_time=10,
+        bounds=[10, 10],
+        nbins=[10, 10],
+     )
