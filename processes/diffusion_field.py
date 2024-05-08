@@ -3,7 +3,7 @@
 Diffusion Field 
 ===============
 
-Diffuses and decays molecular concentrations in a 2D field.
+Diffuses and decays molecular concentrations in a 2D field.h
 """
 
 import copy
@@ -40,6 +40,7 @@ class DiffusionField(Process):
     defaults = {
         'bounds': [20, 20],
         'nbins': [20, 20],
+        "depth": 1, #TODO make this adjustable
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas'],
         'default_diffusion_dt': 0.001,
