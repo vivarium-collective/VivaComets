@@ -12,6 +12,7 @@ from vivarium.core.engine import Engine
 from processes.diffusion_field import get_bin_volume
 from plots.field import plot_objective_flux, plot_fields_temporal
 from cobra.io import read_sbml_model
+from scipy.ndimage import convolve
 
 
 
@@ -39,7 +40,10 @@ class SpatialDFBA(Process):
         'species_info': [ 
             {
                 'name': 'Alteromonas',
-                'model': '../data/Alteromonas_Model.xml'
+                'model': '../data/Alteromonas_Model.xml',
+                'diffusion_rate': 0.001,  # Example rate
+                'advection_vector': (0.0, 0.0),  # No movement
+                'sinking_rate': -0.01  # Example sinking
             }
         ],
     }
@@ -49,6 +53,7 @@ class SpatialDFBA(Process):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = {info['name']: info['model'] for info in self.parameters.get('species_info', [])}
+        
 
         # spatial setting
         self.bounds = self.parameters['bounds']
@@ -56,6 +61,8 @@ class SpatialDFBA(Process):
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         self.bin_volume = get_bin_volume(self.bin_size)
+        self.diffusion_dt = self.parameters.get('default_diffusion_dt', 0.001)
+        self.diffusion_rate = self.parameters.get('default_diffusion_rate', 2E-5) / np.prod(self.bin_size)
 
         # load FBA Model
         self.models = {}
@@ -68,6 +75,28 @@ class SpatialDFBA(Process):
             print(f"Loaded model for {species_name}")
             self.flux_id_maps[species_name] = species['flux_id_map']
             self.kinetic_params[species_name] = species['kinetic_params']
+
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector, sinking_rate):
+        if field.ndim == 2:    
+            laplacian_kernel = np.array([[0,  1, 0], [1, -4, 1], [0,  1, 0]])
+            gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
+            gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
+        else:
+            raise ValueError('Field must be 2D')
+
+        dt = min(timestep, self.diffusion_dt)
+        t = 0.0
+        while t < timestep:
+            laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate
+            grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
+            grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
+            if sinking_rate != 0:
+                vertical_shift = int(sinking_rate * dt / self.bin_size[1])
+                if vertical_shift != 0:
+                    field = np.roll(field, shift=vertical_shift, axis=0)
+            field += dt * (laplacian - grad_x - grad_y)
+            t += dt
+        return field
     
     def initial_state(self, config=None):
         if config is None:
@@ -177,6 +206,12 @@ class SpatialDFBA(Process):
                 print(f"Model for {species_id} not found")
                 continue  # Skip this species if the model is not found
 
+            # Transport parameters for each species
+            diffusion_rate = self.parameters['species_info'][species_id].get('diffusion_rate', self.diffusion_rate)
+            advection_vector = self.parameters['species_info'][species_id].get('advection_vector', (0, 0))
+            sinking_rate = self.parameters['species_info'][species_id].get('sinking_rate', 0)
+
+
             species_model = self.models[species_id] 
 
             for x in range(self.nbins[0]):
@@ -210,6 +245,9 @@ class SpatialDFBA(Process):
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep 
+            # Apply diffusion, advection, and sinking to the updated biomass distribution
+            updated_biomass[species_id] = self.diffuse(updated_biomass[species_id], timestep, diffusion_rate, advection_vector, sinking_rate)
+
         
         return {
             'species': updated_biomass, 
@@ -217,65 +255,6 @@ class SpatialDFBA(Process):
             }
 
     
-# def plot_objective_flux(data, time_points, species_names, out_dir='out', filename='objective_flux'):
-#     if not os.path.exists(out_dir):
-#         os.makedirs(out_dir)
-
-#     num_species = len(species_names)
-#     num_times = len(time_points)
-#     fig, axs = plt.subplots(num_times, num_species + 1, figsize=(num_species * 5, num_times * 5), squeeze=False)
-    
-#     # Calculate global min and max for each species and total biomass
-#     global_min = [np.inf] * (num_species + 1)  # +1 for total biomass
-#     global_max = [-np.inf] * (num_species + 1)
-
-#     # Precompute global min/max for species and total biomass
-#     for time in time_points:
-#         time_index = data["time"].index(time)
-#         total_biomass = np.zeros_like(data["species"][species_names[0]][time_index])
-        
-#         for j, species_id in enumerate(species_names):
-#             current_species = data["species"][species_id][time_index]
-#             total_biomass += current_species
-#             global_min[j] = min(global_min[j], np.min(current_species))
-#             global_max[j] = max(global_max[j], np.max(current_species))
-        
-#         # Update total biomass global min and max
-#         global_min[-1] = min(global_min[-1], np.min(total_biomass))
-#         global_max[-1] = max(global_max[-1], np.max(total_biomass))
-    
-#     # Plotting each species and total biomass for each time
-#     for i, time in enumerate(time_points):
-#         time_index = data["time"].index(time)
-#         total_biomass = np.zeros_like(data["species"][species_names[0]][time_index])
-        
-#         for j, species_id in enumerate(species_names):
-#             current_species = data["species"][species_id][time_index]
-#             total_biomass += current_species
-#             im = axs[i, j].imshow(current_species, cmap='viridis', vmin=global_min[j], vmax=global_max[j])
-#             if i == 0:  # Set title only for the first row
-#                 axs[i, j].set_title(species_id) 
-#             axs[i, j].set_xticks([])
-#             axs[i, j].set_yticks([])
-#             if i == 0:  # Add colorbar only in the first row
-#                 plt.colorbar(im, ax=axs[i, j], fraction=0.046, pad=0.04)
-
-#             if j == 0:  # Add time label to the leftmost column
-#                 axs[i, j].set_ylabel(f'Time {time}', fontsize=12)
-        
-#         # Plot total biomass in the last column
-#         im = axs[i, -1].imshow(total_biomass, cmap='viridis', vmin=global_min[-1], vmax=global_max[-1])
-#         if i == 0:  # Set title only for the first row
-#             axs[i, -1].set_title("Total Biomass")
-#         axs[i, -1].set_xticks([])
-#         axs[i, -1].set_yticks([])
-#         if i == 0:  # Add colorbar only in the first row
-#             plt.colorbar(im, ax=axs[i, -1], fraction=0.046, pad=0.04)
-
-#     plt.tight_layout()
-#     plt.savefig(os.path.join(out_dir, filename))
-#     plt.close()
-
 
 def test_spatial_dfba(
         total_time=10,
