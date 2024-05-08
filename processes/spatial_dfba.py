@@ -212,8 +212,6 @@ class SpatialDFBA(Process):
             advection_vector = species_info.get('advection_vector', (0, 0))
             sinking_rate = species_info.get('sinking_rate', 0)
 
-
-
             species_model = self.models[species_id] 
 
             for x in range(self.nbins[0]):
