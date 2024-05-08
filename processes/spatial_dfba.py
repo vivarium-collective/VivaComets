@@ -207,9 +207,11 @@ class SpatialDFBA(Process):
                 continue  # Skip this species if the model is not found
 
             # Transport parameters for each species
-            diffusion_rate = self.parameters['species_info'][species_id].get('diffusion_rate', self.diffusion_rate)
-            advection_vector = self.parameters['species_info'][species_id].get('advection_vector', (0, 0))
-            sinking_rate = self.parameters['species_info'][species_id].get('sinking_rate', 0)
+            species_info = next(item for item in self.parameters['species_info'] if item['name'] == species_id)
+            diffusion_rate = species_info.get('diffusion_rate', self.diffusion_rate)
+            advection_vector = species_info.get('advection_vector', (0, 0))
+            sinking_rate = species_info.get('sinking_rate', 0)
+
 
 
             species_model = self.models[species_id] 
@@ -294,6 +296,9 @@ def test_spatial_dfba(
             {
                 "model": '../data/iECW_1372.xml', 
                 "name": "ecoli",
+                'diffusion_rate': 0.001,  # Example rate
+                'advection_vector': (0.0, 0.0),  # No movement
+                'sinking_rate': -0.01,  # Example sinking
                 "flux_id_map": {
                     "glucose": "EX_glc__D_e",
                     "oxygen": "EX_o2_e"
