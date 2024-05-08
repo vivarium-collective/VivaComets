@@ -24,3 +24,4 @@ wheels/
 out/
 .python-version
 .ipynb_checkpoints/
+myenv/
