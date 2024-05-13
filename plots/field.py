@@ -177,3 +177,4 @@ def plot_fields_temporal(
     fig_path = os.path.join(out_dir, filename)
     fig.savefig(fig_path, bbox_inches='tight')
     plt.close()
+    return fig
