@@ -279,18 +279,21 @@ def test_spatial_dfba(
         'nbins': nbins,   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
-            # {
-            #     "model": '../data/Alteromonas_Model.xml', 
-            #     "name": "Alteromonas",
-            #     "flux_id_map": {
-            #         "glucose": "EX_cpd00027_e0",
-            #         "oxygen": "EX_cpd00007_e0"
-            #     },
-            #     "kinetic_params": {
-            #         "glucose": (0.5, 2.0),  # Km, Vmax for glucose
-            #         "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
-            #     }
-            # },
+            {
+                "model": '../data/Alteromonas_Model.xml', 
+                "name": "Alteromonas",
+                'diffusion_rate': 0.001,  # Example rate
+                'advection_vector': (0.0, 0.0),  # No movement
+                'sinking_rate': -0.01,  # Example sinking
+                "flux_id_map": {
+                    "glucose": "EX_cpd00027_e0",
+                    "oxygen": "EX_cpd00007_e0"
+                },
+                "kinetic_params": {
+                    "glucose": (0.5, 2.0),  # Km, Vmax for glucose
+                    "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
+                }
+            },
             {
                 "model": '../data/iECW_1372.xml', 
                 "name": "ecoli",
