@@ -16,6 +16,9 @@ from scipy.ndimage import convolve
 
 
 
+# Determine the absolute path to the data directory
+script_dir = os.path.dirname(__file__)
+data_dir = os.path.join(script_dir, '../data')
 
 class SpatialDFBA(Process):
     """
@@ -40,7 +43,7 @@ class SpatialDFBA(Process):
         'species_info': [ 
             {
                 'name': 'Alteromonas',
-                'model': '../data/Alteromonas_Model.xml',
+                'model': os.path.join(data_dir, 'Alteromonas_Model.xml'), #'../data/Alteromonas_Model.xml',
                 'diffusion_rate': 0.001,  # Example rate
                 'advection_vector': (0.0, 0.0),  # No movement
                 'sinking_rate': -0.01  # Example sinking
@@ -280,7 +283,7 @@ def test_spatial_dfba(
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             {
-                "model": '../data/Alteromonas_Model.xml', 
+                "model": os.path.join(data_dir, 'Alteromonas_Model.xml'), #'../data/Alteromonas_Model.xml', 
                 "name": "Alteromonas",
                 'diffusion_rate': 0.001,  # Example rate
                 'advection_vector': (0.0, 0.0),  # No movement
@@ -295,7 +298,7 @@ def test_spatial_dfba(
                 }
             },
             {
-                "model": '../data/iECW_1372.xml', 
+                "model": os.path.join(data_dir, 'iECW_1372.xml'), #'../data/iECW_1372.xml', 
                 "name": "ecoli",
                 'diffusion_rate': 0.001,  # Example rate
                 'advection_vector': (0.0, 0.0),  # No movement
