@@ -50,12 +50,8 @@ class DiffusionField(Process):
             'oxygen': 2.0E-2,
         },
         'advection': {
-            'glucose': (0.01, 0.01),  
+            'glucose': (0.01, 0.02),  
             'oxygen': (0.01, 0.01),   
-        },
-        'sinking': {
-            'glucose': -0.01,  # if the value is positive it goes up
-            'oxygen': -0.02,
         }
     }
 
@@ -78,7 +74,6 @@ class DiffusionField(Process):
             mol_id: self.parameters['advection'].get(mol_id, (0, 0))
             for mol_id in self.molecule_ids
         }
-        self.sinking_rates = self.parameters['sinking']
 
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
         self.diffusion_dt = min(diffusion_dt, self.parameters['default_diffusion_dt'])
@@ -156,9 +151,8 @@ class DiffusionField(Process):
         for mol_id, field in fields.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
-            sinking_rate = self.parameters['sinking'].get(mol_id, 0)
             if np.var(field) > 0:  # If field is not uniform
-                fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector, sinking_rate)
+                fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector)
         delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
         return {'fields': delta_fields}
      
@@ -174,7 +168,7 @@ class DiffusionField(Process):
     def random_field(self):
         return np.random.rand(*self.nbins)
 
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector, sinking_rate):
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector):
         if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
@@ -190,10 +184,6 @@ class DiffusionField(Process):
             laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate   #TODO put bondary 
             grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
             grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
-            if sinking_rate != 0:
-                vertical_shift = int(sinking_rate * dt / self.bin_size[1])  # Vertical shift in bins
-                if vertical_shift != 0:
-                    field = np.roll(field, shift=vertical_shift, axis=0)
             field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field
@@ -210,12 +200,8 @@ def test_fields():
             'oxygen':  2.0E-2,     # 2.0E-5,  # cm^2/s
         },
         'advection': {
-            'glucose': (0.01, 0.01),  # Advection vector for glucose
+            'glucose': (0.01, 0.02),  # Advection vector for glucose
             'oxygen': (0.01, 0.01),   # Advection vector for oxygen
-        },
-        'sinking': {
-            'glucose': -0.02,  # Sinks at a rate of 0.02 units per timestep
-            'oxygen': -0.01,   # Sinks at a rate of 0.01 units per timestep
         }
     }
 
