@@ -11,6 +11,11 @@ environments.
 - **Implementation of the COMETS Methodology Using Vivarium:** Utilizes the robust features of Vivarium to bring the COMETS methodology to life.
 - **Analysis and Visualization Capabilities:** Includes advanced capabilities for analyzing system interactions, with a focus on Flux Balance Analysis (FBA). This allows for the detailed examination and visualization of metabolic fluxes within the system, facilitating a deeper understanding of the underlying biological processes.
 
+## Jupyter Notebook Demonstration
+- **[Diffusion notebook](https://github.com/vivarium-collective/VivaComets/blob/main/notebooks/diffusion.ipynb):** Demonstrates simulating and visualizing molecular concentrations in a 2D field influenced by diffusion, advection, and sinking.
+
+  
+
 
 ## MIT License
 
