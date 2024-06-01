@@ -14,8 +14,6 @@ from plots.field import plot_objective_flux, plot_fields_temporal
 from cobra.io import read_sbml_model
 from scipy.ndimage import convolve
 
-
-
 # Determine the absolute path to the data directory
 script_dir = os.path.dirname(__file__)
 data_dir = os.path.join(script_dir, '../data')
@@ -45,19 +43,16 @@ class SpatialDFBA(Process):
                 'name': 'Alteromonas',
                 'model': os.path.join(data_dir, 'Alteromonas_Model.xml'), #'../data/Alteromonas_Model.xml',
                 'diffusion_rate': 0.001,  # Example rate
-                'advection_vector': (0.0, 0.0),  # No movement
-                'sinking_rate': -0.01  # Example sinking
+                'advection_vector': (0.0, 0.0)  # (advection, sinking)
             }
         ],
     }
 
     def __init__(self, parameters=None):
-        #parameters = {**self.defaults, **(parameters or {})} #TODO check if it can be removed
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = {info['name']: info['model'] for info in self.parameters.get('species_info', [])}
         
-
         # spatial setting
         self.bounds = self.parameters['bounds']
         assert len(self.bounds) == 2, "This process ONLY supports 2D, you can change the bounds parameters to have more or less than 2D"
@@ -79,7 +74,7 @@ class SpatialDFBA(Process):
             self.flux_id_maps[species_name] = species['flux_id_map']
             self.kinetic_params[species_name] = species['kinetic_params']
 
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector, sinking_rate):
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector):
         if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0], [1, -4, 1], [0,  1, 0]])
             gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
@@ -93,6 +88,7 @@ class SpatialDFBA(Process):
             laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate
             grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
             grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
+            sinking_rate = advection_vector[1]
             if sinking_rate != 0:
                 vertical_shift = int(sinking_rate * dt / self.bin_size[1])
                 if vertical_shift != 0:
@@ -213,7 +209,6 @@ class SpatialDFBA(Process):
             species_info = next(item for item in self.parameters['species_info'] if item['name'] == species_id)
             diffusion_rate = species_info.get('diffusion_rate', self.diffusion_rate)
             advection_vector = species_info.get('advection_vector', (0, 0))
-            sinking_rate = species_info.get('sinking_rate', 0)
 
             species_model = self.models[species_id] 
 
@@ -249,15 +244,13 @@ class SpatialDFBA(Process):
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep 
             # Apply diffusion, advection, and sinking to the updated biomass distribution
-            updated_biomass[species_id] = self.diffuse(updated_biomass[species_id], timestep, diffusion_rate, advection_vector, sinking_rate)
+            updated_biomass[species_id] = self.diffuse(updated_biomass[species_id], timestep, diffusion_rate, advection_vector)
 
         
         return {
             'species': updated_biomass, 
             'fields': updated_fields,
             }
-
-    
 
 def test_spatial_dfba(
         total_time=10,
@@ -286,8 +279,7 @@ def test_spatial_dfba(
                 "model": os.path.join(data_dir, 'Alteromonas_Model.xml'), #'../data/Alteromonas_Model.xml', 
                 "name": "Alteromonas",
                 'diffusion_rate': 0.001,  # Example rate
-                'advection_vector': (0.0, 0.0),  # No movement
-                'sinking_rate': -0.01,  # Example sinking
+                'advection_vector': (0.0, -0.01),  # (advection, sinking)
                 "flux_id_map": {
                     "glucose": "EX_cpd00027_e0",
                     "oxygen": "EX_cpd00007_e0"
@@ -301,8 +293,7 @@ def test_spatial_dfba(
                 "model": os.path.join(data_dir, 'iECW_1372.xml'), #'../data/iECW_1372.xml', 
                 "name": "ecoli",
                 'diffusion_rate': 0.001,  # Example rate
-                'advection_vector': (0.0, 0.0),  # No movement
-                'sinking_rate': -0.01,  # Example sinking
+                'advection_vector': (0.0, -0.01),  # (advection, sinking)
                 "flux_id_map": {
                     "glucose": "EX_glc__D_e",
                     "oxygen": "EX_o2_e"
@@ -338,8 +329,6 @@ def test_spatial_dfba(
     fields = data["fields"]
     fields.update(data["species"])
 
-
-
     #TODO asserts the data 
     #print(data)
 
@@ -359,8 +348,7 @@ def test_spatial_dfba(
         plot_fields=["glucose", "oxygen", "ecoli"],
         molecule_colormaps={"glucose": "Blues", "oxygen": "Greens", "ecoli": "Purples"},
         filename='spatial_dfba_test',
-        )
-
+    )
 
 if __name__ == '__main__':
     test_spatial_dfba()
