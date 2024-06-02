@@ -185,6 +185,14 @@ class SpatialDFBA(Process):
         if species_info and 'kinetic_params' in species_info:
             return species_info['kinetic_params'].get(molecule_name)
         return None
+    
+    def clamp_to_zero(self, field):
+        """
+        Clamps negative values in the field to zero. We never have negative concentration of a molecule in the ocean. 
+        """
+        field[field < 0] = 0
+        return field
+
 
     #calculate FBA for this species in this location
     def next_update(self, timestep, states):
@@ -237,7 +245,6 @@ class SpatialDFBA(Process):
                         updated_biomass[species_id][x, y] += biomass_update
 
                         # update the fields 
-                        #TODO smarter method for reconciling multiple species updates, field should not go below zero
                         for molecule_name in self.molecule_ids:
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
@@ -246,7 +253,9 @@ class SpatialDFBA(Process):
             # Apply diffusion, advection, and sinking to the updated biomass distribution
             updated_biomass[species_id] = self.diffuse(updated_biomass[species_id], timestep, diffusion_rate, advection_vector)
 
-        
+        for field_id in updated_fields:
+            updated_fields[field_id] = self.clamp_to_zero(updated_fields[field_id])
+
         return {
             'species': updated_biomass, 
             'fields': updated_fields,
@@ -261,11 +270,12 @@ def test_spatial_dfba(
     desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
     initial_state_config = {
-        'random': {
-            'glucose': 5.0,  # Max random value for glucose
-            'oxygen': 2.0,   # Max random value for oxygen
+        'uniform': {
+            'glucose': 15.0,  # Max random value for glucose
+            'oxygen': 12.0,   # Max random value for oxygen
             'species': {
-                'ecoli': 0.5   # Max random value for E. coli biomass
+                'ecoli': 0.5,   # Max random value for E. coli biomass
+                'Alteromonas': 0.5   # Max random value for Alteromonas biomass
             }
         }
     }
@@ -329,6 +339,8 @@ def test_spatial_dfba(
     fields = data["fields"]
     fields.update(data["species"])
 
+    
+
     #TODO asserts the data 
     #print(data)
 
@@ -341,14 +353,15 @@ def test_spatial_dfba(
         filename='objective_flux_plot'
     )
 
-    plot_fields_temporal(
-        fields_data=fields, 
-        desired_time_points=desired_time_points, 
-        actual_time_points=actual_time_points,
-        plot_fields=["glucose", "oxygen", "ecoli"],
-        molecule_colormaps={"glucose": "Blues", "oxygen": "Greens", "ecoli": "Purples"},
-        filename='spatial_dfba_test',
-    )
+    # plot_fields_temporal(
+    #     fields_data=data['fields'], 
+    #     desired_time_points=desired_time_points, 
+    #     actual_time_points=actual_time_points,
+    #     plot_fields=["glucose", "oxygen", "ecoli"],
+    #     molecule_colormaps={"glucose": "Blues", "oxygen": "Greens", "ecoli": "Purples"},
+    #     out_dir='./out',
+    #     filename='spatial_dfba_test',
+    # )
 
 if __name__ == '__main__':
     test_spatial_dfba()
