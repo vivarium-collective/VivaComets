@@ -28,8 +28,10 @@ def get_bin_site(location, n_bins, bounds):
     return bin_site  # address of the bin
 
 
-def get_bin_volume(bin_size):
-    return np.prod(bin_size)
+def get_bin_volume(bin_size, depth=1):
+    dimensions = bin_size + [depth]
+    return np.prod(dimensions)
+
 
 
 class DiffusionField(Process):
@@ -77,7 +79,8 @@ class DiffusionField(Process):
 
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
         self.diffusion_dt = min(diffusion_dt, self.parameters['default_diffusion_dt'])
-        self.bin_volume = get_bin_volume(self.bin_size)
+        self.bin_volume = get_bin_volume(self.bin_size, self.parameters["depth"])
+
 
     def initial_state(self, config=None):
         """get initial state of the fields

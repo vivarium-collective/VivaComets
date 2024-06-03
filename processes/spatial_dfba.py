@@ -6,10 +6,10 @@ Spatial DFBA
 import os
 import numpy as np
 from matplotlib import pyplot as plt
-
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 from processes.diffusion_field import get_bin_volume
+import inspect
 from plots.field import plot_objective_flux, plot_fields_temporal
 from cobra.io import read_sbml_model
 
@@ -32,7 +32,7 @@ class SpatialDFBA(Process):
     defaults = {
         'bounds': [3, 3],  # cm
         'nbins': [3, 3],
-        "depth": 1, #TODO make it adjustable
+        "depth": 0.01, 
         'molecules': [
             'glucose',
             'oxygen'
@@ -55,7 +55,7 @@ class SpatialDFBA(Process):
         assert len(self.bounds) == 2, "This process ONLY supports 2D, you can change the bounds parameters to have more or less than 2D"
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
-        self.bin_volume = get_bin_volume(self.bin_size)
+        self.bin_volume = get_bin_volume(self.bin_size, self.parameters["depth"])
 
         # load FBA Model
         self.models = {}
@@ -208,7 +208,7 @@ class SpatialDFBA(Process):
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep 
+                                updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep 
 
         return {
             'species': updated_biomass, 
@@ -216,17 +216,17 @@ class SpatialDFBA(Process):
             }
 
 def test_spatial_dfba(
-        total_time=10,
+        total_time=200,
         nbins=[10, 10],
 ):
     # Configuration for the spatial environment and simulation
-    timestep = 1
+    timestep = 1/60
     desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
     initial_state_config = {
         'uniform': {
-            'glucose': 15.0,  # Max random value for glucose
-            'oxygen': 12.0,   # Max random value for oxygen
+            'glucose': 200.0,  # Max random value for glucose
+            'oxygen': 200.0,   # Max random value for oxygen
             'species': {
                 'ecoli': 0.5,   # Max random value for E. coli biomass
                 'Alteromonas': 0.5   # Max random value for Alteromonas biomass
@@ -235,7 +235,7 @@ def test_spatial_dfba(
     }
 
     config = {
-        'bounds': [10, 10],  # dimensions of the environment
+        'bounds': [20, 20],  # dimensions of the environment
         'nbins': nbins,   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
@@ -247,8 +247,8 @@ def test_spatial_dfba(
                     "oxygen": "EX_cpd00007_e0"
                 },
                 "kinetic_params": {
-                    "glucose": (0.5, 2.0),  # Km, Vmax for glucose
-                    "oxygen": (0.3, 5.0),   # Km, Vmax for oxygen
+                    "glucose": (0.5, 0.0005),  # Km, Vmax for glucose
+                    "oxygen": (0.3,  0.0005),   # Km, Vmax for oxygen
                 }
             },
             {
@@ -259,8 +259,8 @@ def test_spatial_dfba(
                     "oxygen": "EX_o2_e"
                 },
                 "kinetic_params": {
-                    "glucose": (0.4, 1.5),  # Km, Vmax for glucose
-                    "oxygen": (0.25, 4.5),  # Km, Vmax for oxygen
+                    "glucose": (0.4, 0.6),  # Km, Vmax for glucose
+                    "oxygen": (0.25, 0.6),  # Km, Vmax for oxygen
                 }
             }
         ]
