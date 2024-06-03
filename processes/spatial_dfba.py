@@ -12,7 +12,6 @@ from vivarium.core.engine import Engine
 from processes.diffusion_field import get_bin_volume
 from plots.field import plot_objective_flux, plot_fields_temporal
 from cobra.io import read_sbml_model
-from scipy.ndimage import convolve
 
 # Determine the absolute path to the data directory
 script_dir = os.path.dirname(__file__)
@@ -41,9 +40,7 @@ class SpatialDFBA(Process):
         'species_info': [ 
             {
                 'name': 'Alteromonas',
-                'model': os.path.join(data_dir, 'Alteromonas_Model.xml'), #'../data/Alteromonas_Model.xml',
-                'diffusion_rate': 0.001,  # Example rate
-                'advection_vector': (0.0, 0.0)  # (advection, sinking)
+                'model': os.path.join(data_dir, 'Alteromonas_Model.xml'),
             }
         ],
     }
@@ -59,8 +56,6 @@ class SpatialDFBA(Process):
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         self.bin_volume = get_bin_volume(self.bin_size)
-        self.diffusion_dt = self.parameters.get('default_diffusion_dt', 0.001)
-        self.diffusion_rate = self.parameters.get('default_diffusion_rate', 2E-5) / np.prod(self.bin_size)
 
         # load FBA Model
         self.models = {}
@@ -74,29 +69,6 @@ class SpatialDFBA(Process):
             self.flux_id_maps[species_name] = species['flux_id_map']
             self.kinetic_params[species_name] = species['kinetic_params']
 
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector):
-        if field.ndim == 2:    
-            laplacian_kernel = np.array([[0,  1, 0], [1, -4, 1], [0,  1, 0]])
-            gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
-            gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
-        else:
-            raise ValueError('Field must be 2D')
-
-        dt = min(timestep, self.diffusion_dt)
-        t = 0.0
-        while t < timestep:
-            laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate
-            grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
-            grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
-            sinking_rate = advection_vector[1]
-            if sinking_rate != 0:
-                vertical_shift = int(sinking_rate * dt / self.bin_size[1])
-                if vertical_shift != 0:
-                    field = np.roll(field, shift=vertical_shift, axis=0)
-            field += dt * (laplacian - grad_x - grad_y)
-            t += dt
-        return field
-    
     def initial_state(self, config=None):
         if config is None:
             config = {}
@@ -185,14 +157,6 @@ class SpatialDFBA(Process):
         if species_info and 'kinetic_params' in species_info:
             return species_info['kinetic_params'].get(molecule_name)
         return None
-    
-    def clamp_to_zero(self, field):
-        """
-        Clamps negative values in the field to zero. We never have negative concentration of a molecule in the ocean. 
-        """
-        field[field < 0] = 0
-        return field
-
 
     #calculate FBA for this species in this location
     def next_update(self, timestep, states):
@@ -212,11 +176,6 @@ class SpatialDFBA(Process):
             if species_id not in self.models:
                 print(f"Model for {species_id} not found")
                 continue  # Skip this species if the model is not found
-
-            # Transport parameters for each species
-            species_info = next(item for item in self.parameters['species_info'] if item['name'] == species_id)
-            diffusion_rate = species_info.get('diffusion_rate', self.diffusion_rate)
-            advection_vector = species_info.get('advection_vector', (0, 0))
 
             species_model = self.models[species_id] 
 
@@ -249,12 +208,7 @@ class SpatialDFBA(Process):
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep 
-            # Apply diffusion, advection, and sinking to the updated biomass distribution
-            updated_biomass[species_id] = self.diffuse(updated_biomass[species_id], timestep, diffusion_rate, advection_vector)
-
-        for field_id in updated_fields:
-            updated_fields[field_id] = self.clamp_to_zero(updated_fields[field_id])
+                                updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep 
 
         return {
             'species': updated_biomass, 
@@ -286,10 +240,8 @@ def test_spatial_dfba(
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [
             {
-                "model": os.path.join(data_dir, 'Alteromonas_Model.xml'), #'../data/Alteromonas_Model.xml', 
+                "model": os.path.join(data_dir, 'Alteromonas_Model.xml'), 
                 "name": "Alteromonas",
-                'diffusion_rate': 0.001,  # Example rate
-                'advection_vector': (0.0, -0.01),  # (advection, sinking)
                 "flux_id_map": {
                     "glucose": "EX_cpd00027_e0",
                     "oxygen": "EX_cpd00007_e0"
@@ -300,10 +252,8 @@ def test_spatial_dfba(
                 }
             },
             {
-                "model": os.path.join(data_dir, 'iECW_1372.xml'), #'../data/iECW_1372.xml', 
+                "model": os.path.join(data_dir, 'iECW_1372.xml'), 
                 "name": "ecoli",
-                'diffusion_rate': 0.001,  # Example rate
-                'advection_vector': (0.0, -0.01),  # (advection, sinking)
                 "flux_id_map": {
                     "glucose": "EX_glc__D_e",
                     "oxygen": "EX_o2_e"
@@ -338,11 +288,6 @@ def test_spatial_dfba(
     data = sim.emitter.get_timeseries()
     fields = data["fields"]
     fields.update(data["species"])
-
-    
-
-    #TODO asserts the data 
-    #print(data)
 
     # plots
     plot_objective_flux(
