@@ -3,7 +3,7 @@
 Diffusion Field 
 ===============
 
-Diffuses and decays molecular concentrations in a 2D field.h
+Diffuses and decays molecular concentrations in a 2D field.
 """
 
 import copy
@@ -33,18 +33,16 @@ def get_bin_volume(bin_size, depth=1):
     return np.prod(dimensions)
 
 
-
 class DiffusionField(Process):
     """
     DiffusionField Process
-
     """
     defaults = {
         'bounds': [20, 20],
         'nbins': [20, 20],
         "depth": 1, #TODO make this adjustable
         'molecules': ['glucose', 'oxygen'],
-        'species': ['Alteromonas'],
+        'species': ['Alteromonas', 'ecoli'],
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,
         'diffusion': {
@@ -60,10 +58,11 @@ class DiffusionField(Process):
     def __init__(self, parameters=None):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
+        self.species_ids = self.parameters['species']
         self.bounds = self.parameters['bounds']
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
-        assert len(self.bounds) == 2, "Process only support 2D"
+        assert len(self.bounds) == 2, "Process only supports 2D"
         diffusion_rate = self.parameters['default_diffusion_rate']
         dx, dy = self.bin_size  
         dx2_dy2 = get_bin_volume(self.bin_size)
@@ -111,7 +110,23 @@ class DiffusionField(Process):
             else:
                 field = np.ones(shape)
             fields[mol] = field
-        return {'fields': fields, 'species': {}}
+        species = {}
+        for spec in self.parameters['species']:
+            shape = tuple(self.nbins)
+            if 'random' in config:
+                random_config = config['random']
+                if isinstance(random_config, dict):
+                    max_value = random_config.get(spec, 1)
+                else:
+                    max_value = random_config
+                field = np.random.rand(*shape) * max_value
+            elif 'uniform' in config:
+                value = config.get('uniform', 1)
+                field = np.ones(shape) * value
+            else:
+                field = np.ones(shape)
+            species[spec] = field
+        return {'fields': fields, 'species': species}
 
     def ports_schema(self):
         schema = {
@@ -149,16 +164,17 @@ class DiffusionField(Process):
         return schema
 
     def next_update(self, timestep, states):
-        fields = states['fields']
-        fields_new = copy.deepcopy(fields)
-        for mol_id, field in fields.items():
+        combined_dict = {**states['fields'], **states['species']}
+        combined_new = copy.deepcopy(combined_dict)
+        for mol_id, field in combined_dict.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
             if np.var(field) > 0:  # If field is not uniform
-                fields_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector)
-        delta_fields = {mol_id: fields_new[mol_id] - field for mol_id, field in fields.items()}
-        return {'fields': delta_fields}
-     
+                combined_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector)
+        delta_fields = {mol_id: combined_new[mol_id] - field for mol_id, field in states['fields'].items()}
+        delta_species = {spec_id: combined_new[spec_id] - field for spec_id, field in states['species'].items()}
+        return {'fields': delta_fields, 'species': delta_species}
+
     def get_bin_site(self, location):
         return get_bin_site(
             [loc for loc in location],
@@ -198,6 +214,7 @@ def test_fields():
         'bounds': [20, 20],
         'nbins': [20, 20],
         'molecules': ['glucose', 'oxygen'],
+        'species': ['Alteromonas', 'ecoli'],
         'diffusion': {
             'glucose': 6.7E-1,     # 6.7E-6,  # cm^2/s
             'oxygen':  2.0E-2,     # 2.0E-5,  # cm^2/s
@@ -233,6 +250,14 @@ def test_fields():
         actual_time_points=data['time'],
         out_dir='./out',
         filename='Diffusion_test')
+
+    # plot the species
+    plot_fields_temporal(
+        fields_data=data['species'],
+        desired_time_points=time_list,
+        actual_time_points=data['time'],
+        out_dir='./out',
+        filename='Species_test')
 
 
 if __name__ == '__main__':
