@@ -208,7 +208,7 @@ class SpatialDFBA(Process):
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_fields[molecule_name.lower()][x, y] += flux * self.bin_volume * timestep 
+                                updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep * updated_biomass[species_id][x, y]
 
         return {
             'species': updated_biomass, 
@@ -217,14 +217,14 @@ class SpatialDFBA(Process):
 
 def test_spatial_dfba(
         total_time=200,
-        nbins=[10, 10],
+        nbins=[2, 2],
 ):
     # Configuration for the spatial environment and simulation
     timestep = 1/60
     desired_time_points = [0, 1, int(total_time/4), int(total_time/2), total_time-1]
     actual_time_points = desired_time_points
     initial_state_config = {
-        'uniform': {
+        'random': {
             'glucose': 200.0,  # Max random value for glucose
             'oxygen': 200.0,   # Max random value for oxygen
             'species': {
@@ -235,7 +235,7 @@ def test_spatial_dfba(
     }
 
     config = {
-        'bounds': [20, 20],  # dimensions of the environment
+        'bounds': [10, 10],  # dimensions of the environment
         'nbins': nbins,   # division into bins
         'molecules': ['glucose', 'oxygen'],  # available molecules
         "species_info": [

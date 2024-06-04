@@ -40,7 +40,7 @@ class DiffusionField(Process):
     defaults = {
         'bounds': [20, 20],
         'nbins': [20, 20],
-        "depth": 1, #TODO make this adjustable
+        "depth": 1, 
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas', 'ecoli'],
         'default_diffusion_dt': 0.001,
