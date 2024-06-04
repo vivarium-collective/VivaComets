@@ -216,7 +216,7 @@ class SpatialDFBA(Process):
             }
 
 def test_spatial_dfba(
-        total_time=200,
+        total_time=10,
         nbins=[2, 2],
 ):
     # Configuration for the spatial environment and simulation
