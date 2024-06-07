@@ -41,6 +41,7 @@ class SpatialDFBA(Process):
             {
                 'name': 'Alteromonas',
                 'model': os.path.join(data_dir, 'Alteromonas_Model.xml'),
+                # 'fixed_bounds': {'reaction_name': (lb, ub)}
             }
         ],
     }
@@ -61,13 +62,24 @@ class SpatialDFBA(Process):
         self.models = {}
         self.flux_id_maps = {}
         self.kinetic_params = {}
+        self.exchange_fluxes = {}
         for species in self.parameters.get('species_info', []):
             model_path = species['model']
             species_name = species['name']
+            
             self.models[species_name] = read_sbml_model(model_path)
             print(f"Loaded model for {species_name}")
             self.flux_id_maps[species_name] = species['flux_id_map']
             self.kinetic_params[species_name] = species['kinetic_params']
+
+            # Initialize exchange fluxes
+            self.exchange_fluxes[species_name] = {
+                reaction_id: np.zeros(self.nbins) for reaction_id in self.models[species_name].exchanges
+            }
+
+
+            # fixed_bounds = species['fixed_bounds']  # TODO -- need to add this option
+            # These fixed bounds can be applied right here
 
     def initial_state(self, config=None):
         if config is None:
@@ -108,6 +120,7 @@ class SpatialDFBA(Process):
         schema = {
             'species': {},
             'fields': {},
+            'exchange_fluxes': {},
             'dimensions': {
                 'bounds': {
                     '_value': self.bounds,
@@ -131,6 +144,16 @@ class SpatialDFBA(Process):
                 '_emit': True
             }
 
+        # Define schema for exchange fluxes
+        schema['exchange_fluxes'][species_name] = {
+            reaction_id: {
+                '_default': np.zeros(self.nbins),
+                '_updater': 'set',
+                '_emit': True,
+                '_output': True
+            } for reaction_id in self.models[species_name].exchanges
+        }
+        
         # Define schema for each molecule listed in the parameters
         for molecule in self.parameters['molecules']:
             schema['fields'][molecule] = {
@@ -171,6 +194,12 @@ class SpatialDFBA(Process):
         # prepare update dicts
         updated_biomass = {species_id: np.zeros(self.nbins) for species_id in species_states.keys()}
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
+        updated_exchange_fluxes = {
+            species_id: {
+                reaction_id: np.zeros(self.nbins) for reaction_id in self.models[species_id].exchanges
+            } for species_id in species_states.keys()
+        }
+
 
         for species_id, species_array in species_states.items():
             if species_id not in self.models:
@@ -209,11 +238,18 @@ class SpatialDFBA(Process):
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep * updated_biomass[species_id][x, y]
+                        # Update exchange fluxes        
+                        for reaction_id, flux in solution.exchanges.items():
+                            if reaction_id in updated_exchange_fluxes[species_id]:
+                                updated_exchange_fluxes[species_id][reaction_id][x, y] = flux
+
 
         return {
             'species': updated_biomass, 
             'fields': updated_fields,
+            'exchange_fluxes': updated_exchange_fluxes
             }
+    
 
 def test_spatial_dfba(
         total_time=10,
@@ -249,7 +285,8 @@ def test_spatial_dfba(
                 "kinetic_params": {
                     "glucose": (0.5, 0.0005),  # Km, Vmax for glucose
                     "oxygen": (0.3,  0.0005),   # Km, Vmax for oxygen
-                }
+                },
+                # 'fixed_bounds': {'rxn_name': (lb, ub)}
             },
             {
                 "model": os.path.join(data_dir, 'iECW_1372.xml'), 
