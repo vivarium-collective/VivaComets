@@ -72,10 +72,18 @@ class SpatialDFBA(Process):
             self.flux_id_maps[species_name] = species['flux_id_map']
             self.kinetic_params[species_name] = species['kinetic_params']
 
-            # Initialize exchange fluxes
+            # Initialize exchange fluxes 
             self.exchange_fluxes[species_name] = {
-                reaction_id: np.zeros(self.nbins) for reaction_id in self.models[species_name].exchanges
+                reaction.id: {
+                    'name': reaction.name,
+                    'reaction': str(reaction.reaction),
+                    'lower_bound': reaction.lower_bound,
+                    'upper_bound': reaction.upper_bound,
+                    'flux': np.zeros(self.nbins)
+                } for reaction in self.models[species_name].exchanges
             }
+
+
 
 
             # fixed_bounds = species['fixed_bounds']  # TODO -- need to add this option
@@ -144,16 +152,42 @@ class SpatialDFBA(Process):
                 '_emit': True
             }
 
-        # Define schema for exchange fluxes
-        schema['exchange_fluxes'][species_name] = {
-            reaction_id: {
-                '_default': np.zeros(self.nbins),
-                '_updater': 'set',
-                '_emit': True,
-                '_output': True
-            } for reaction_id in self.models[species_name].exchanges
-        }
-        
+            # Define schema for exchange fluxes with additional information
+            schema['exchange_fluxes'][species_name] = {
+                reaction_id: {
+                    'name': {
+                        '_default': self.exchange_fluxes[species_name][reaction_id]['name'],
+                        '_updater': 'set',
+                        '_emit': True,
+                        '_output': True
+                    },
+                    'reaction': {
+                        '_default': self.exchange_fluxes[species_name][reaction_id]['reaction'],
+                        '_updater': 'set',
+                        '_emit': True,
+                        '_output': True
+                    },
+                    'lower_bound': {
+                        '_default': self.exchange_fluxes[species_name][reaction_id]['lower_bound'],
+                        '_updater': 'set',
+                        '_emit': True,
+                        '_output': True
+                    },
+                    'upper_bound': {
+                        '_default': self.exchange_fluxes[species_name][reaction_id]['upper_bound'],
+                        '_updater': 'set',
+                        '_emit': True,
+                        '_output': True
+                    },
+                    'flux': {
+                        '_default': np.zeros(self.nbins),
+                        '_updater': 'set',
+                        '_emit': True,
+                        '_output': True
+                    }
+                } for reaction_id in self.exchange_fluxes[species_name]
+            }
+
         # Define schema for each molecule listed in the parameters
         for molecule in self.parameters['molecules']:
             schema['fields'][molecule] = {
@@ -196,9 +230,16 @@ class SpatialDFBA(Process):
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
         updated_exchange_fluxes = {
             species_id: {
-                reaction_id: np.zeros(self.nbins) for reaction_id in self.models[species_id].exchanges
+                reaction.id: {
+                    'name': reaction.name,
+                    'reaction': reaction.reaction,
+                    'lower_bound': reaction.lower_bound,
+                    'upper_bound': reaction.upper_bound,
+                    'flux': np.zeros(self.nbins)
+                } for reaction in self.models[species_id].exchanges
             } for species_id in species_states.keys()
         }
+
 
 
         for species_id, species_array in species_states.items():
@@ -239,9 +280,10 @@ class SpatialDFBA(Process):
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep * updated_biomass[species_id][x, y]
                         # Update exchange fluxes        
-                        for reaction_id, flux in solution.exchanges.items():
-                            if reaction_id in updated_exchange_fluxes[species_id]:
-                                updated_exchange_fluxes[species_id][reaction_id][x, y] = flux
+                        for reaction_id in self.exchange_fluxes[species_id]:
+                            if reaction_id in solution.fluxes.index:
+                                flux = solution.fluxes[reaction_id]
+                                updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux
 
 
         return {
@@ -316,6 +358,7 @@ def test_spatial_dfba(
         topology={'fba_process': {
             'fields': ('fields',),
             'species': ('species',),
+            'exchange_fluxes': ('exchange_fluxes',),
             'dimensions': ('dimensions',),
         }}
     )
@@ -326,14 +369,14 @@ def test_spatial_dfba(
     fields = data["fields"]
     fields.update(data["species"])
 
-    # plots
-    plot_objective_flux(
-        data,
-        time_points=desired_time_points,
-        species_names=[species['name'] for species in config['species_info']],
-        out_dir='./out',
-        filename='objective_flux_plot'
-    )
+    # # plots
+    # plot_objective_flux(
+    #     data,
+    #     time_points=desired_time_points,
+    #     species_names=[species['name'] for species in config['species_info']],
+    #     out_dir='./out',
+    #     filename='objective_flux_plot'
+    # )
 
     # plot_fields_temporal(
     #     fields_data=data['fields'], 
