@@ -284,6 +284,7 @@ class SpatialDFBA(Process):
                             if reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux
+                                #print(updated_exchange_fluxes)
 
 
         return {
