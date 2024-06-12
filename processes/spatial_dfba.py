@@ -95,11 +95,13 @@ class SpatialDFBA(Process):
                 } for reaction in self.models[species_name].exchanges
             }
 
-
-
-
-            # fixed_bounds = species['fixed_bounds']  # TODO -- need to add this option
-            # These fixed bounds can be applied right here
+            # Apply fixed bounds
+            if 'fixed_bounds' in species:
+                for reaction_id, (lb, ub) in species['fixed_bounds'].items():
+                    if reaction_id in self.models[species_name].reactions:
+                        reaction = self.models[species_name].reactions.get_by_id(reaction_id)
+                        reaction.lower_bound = lb
+                        reaction.upper_bound = ub
 
     def initial_state(self, config=None):
         if config is None:
@@ -341,7 +343,9 @@ def test_spatial_dfba(
                     "glucose": (0.5, 0.0005),  # Km, Vmax for glucose
                     "oxygen": (0.3,  0.0005),   # Km, Vmax for oxygen
                 },
-                # 'fixed_bounds': {'rxn_name': (lb, ub)}
+                "fixed_bounds": {
+                    'EX_cpd00149_e0': (-10, 10)  # Setting fixed bounds for Alteromonas
+                }
             },
             {
                 "model": os.path.join(data_dir, 'iECW_1372.xml'), 
@@ -353,6 +357,9 @@ def test_spatial_dfba(
                 "kinetic_params": {
                     "glucose": (0.4, 0.6),  # Km, Vmax for glucose
                     "oxygen": (0.25, 0.6),  # Km, Vmax for oxygen
+                },
+                "fixed_bounds": {
+                    'EX_fe3dhbzs_e': (0, 10)  # Setting fixed bounds for E. coli
                 }
             }
         ]
