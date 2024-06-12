@@ -142,19 +142,7 @@ class SpatialDFBA(Process):
         schema = {
             'species': {},
             'fields': {},
-            'exchange_fluxes': {},
-            'dimensions': {
-                'bounds': {
-                    '_value': self.bounds,
-                    '_updater': 'set',
-                    '_emit': True
-                },
-                'nbins': {
-                    '_value': self.nbins,
-                    '_updater': 'set',
-                    '_emit': True
-                }
-            }
+            'exchange_fluxes': {}
         }
 
         # Define schema for each species based on species_info
@@ -379,7 +367,6 @@ def test_spatial_dfba(
             'fields': ('fields',),
             'species': ('species',),
             'exchange_fluxes': ('exchange_fluxes',),
-            'dimensions': ('dimensions',),
         }}
     )
     sim.update(total_time)
