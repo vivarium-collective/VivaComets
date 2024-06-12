@@ -12,6 +12,18 @@ from processes.diffusion_field import get_bin_volume
 import inspect
 from plots.field import plot_objective_flux, plot_fields_temporal
 from cobra.io import read_sbml_model
+import logging
+import warnings
+
+# Suppress warnings
+warnings.filterwarnings('ignore', category=FutureWarning)
+
+# Suppress logging warnings
+logging.getLogger('matplotlib').setLevel(logging.ERROR)
+
+# Suppress specific cobra warnings
+cobra_logger = logging.getLogger('cobra.medium.boundary_types')
+cobra_logger.setLevel(logging.ERROR)
 
 # Determine the absolute path to the data directory
 script_dir = os.path.dirname(__file__)
