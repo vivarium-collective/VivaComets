@@ -8,14 +8,22 @@ from processes.spatial_dfba import SpatialDFBA
 from plots.field import plot_objective_flux, plot_fields_temporal
 from vivarium.core.engine import Engine
 
+# Define comets_config 
+comets_config = {
+    'total_time': 10,
+    'bounds': [5, 5],
+    'nbins': [2, 2],
+}
 
-def run_comets(
-        total_time=10,
-        bounds=[10, 10],
-        nbins=[10, 10],
-):
+def run_comets(comets_config):
 
-    molecules = ['glucose', 'oxygen']
+    # Parameters shared by both processes
+    shared_params = {
+        'bounds': comets_config['bounds'],
+        'nbins': comets_config['nbins'],
+        'molecules': ['glucose', 'oxygen'],
+    }
+
     species_info = [
         {
             "name": "Alteromonas",
@@ -48,13 +56,6 @@ def run_comets(
             }
         }
     ]
-
-    # Parameters shared by both processes
-    shared_params = {
-        'bounds': [5, 5],
-        'nbins': [2, 2],
-        'molecules': molecules,
-    }
 
     # Specific parameters for Diffusion Field
     diffusion_field_params = {
@@ -124,11 +125,11 @@ def run_comets(
         },
         initial_state=initial_state
     )
-    sim.update(total_time)
+    sim.update(comets_config['total_time'])
 
     # retrieve the results and plot them
     data = sim.emitter.get_timeseries()
-    desired_time_points = [1, 3, total_time-1]
+    desired_time_points = [1, 3, comets_config['total_time'] - 1]
 
     plot_objective_flux(
         data,
@@ -149,8 +150,4 @@ def run_comets(
 
 
 if __name__ == '__main__':
-    run_comets(
-        total_time=10,
-        bounds=[10, 10],
-        nbins=[10, 10],
-    )
+    run_comets(comets_config)
