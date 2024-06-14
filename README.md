@@ -15,8 +15,8 @@ environments.
 - **[Diffusion notebook](https://github.com/vivarium-collective/VivaComets/blob/main/notebooks/diffusion.ipynb):** Demonstrates simulating and visualizing molecular concentrations in a 2D field influenced by diffusion, advection, and sinking.
 
 - **[Spatial dFBA notebook](https://github.com/vivarium-collective/VivaComets/blob/main/notebooks/Spatial_DFBA.ipynb):** This Jupyter notebook models the dynamic metabolic behavior of microorganisms over time using dynamic Flux Balance Analysis (dFBA), it incorporates two-dimensional partial differential equations (PDEs) to simulate the diffusion and advection of substances for added spatial resolution and realism.
+- **[VivaComets Notebook](https://github.com/vivarium-collective/VivaComets/blob/main/notebooks/VivaComets.ipynb):** The VivaComets notebook integrates the functionalities of two previously developed notebooks to create a comprehensive simulation environment. This combined notebook accounts for the diffusion and advection of molecules and species biomass within a 3D environment. Additionally, it performs dynamic Flux Balance Analysis (dFBA) for organisms in this spatially structured environment.
 
--**[VivaComets Notebook](https://github.com/vivarium-collective/VivaComets/blob/main/notebooks/VivaComets.ipynb):** The VivaComets notebook integrates the functionalities of two previously developed notebooks to create a comprehensive simulation environment. This combined notebook accounts for the diffusion and advection of molecules and species biomass within a 3D environment. Additionally, it performs dynamic Flux Balance Analysis (dFBA) for organisms in this spatially structured environment.
 
 Key Features:
 
