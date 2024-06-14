@@ -103,6 +103,7 @@ class SpatialDFBA(Process):
                         reaction.lower_bound = lb
                         reaction.upper_bound = ub
 
+
     def initial_state(self, config=None):
         if config is None:
             config = {}
@@ -142,7 +143,19 @@ class SpatialDFBA(Process):
         schema = {
             'species': {},
             'fields': {},
-            'exchange_fluxes': {}
+            'exchange_fluxes': {},
+            'dimensions': {
+                'bounds': {
+                    '_value': self.bounds,
+                    '_updater': 'set',
+                    '_emit': True
+                },
+                'nbins': {
+                    '_value': self.nbins,
+                    '_updater': 'set',
+                    '_emit': True
+                }
+            }
         }
 
         # Define schema for each species based on species_info
@@ -199,6 +212,7 @@ class SpatialDFBA(Process):
             }
 
         return schema
+
 
     def get_reaction_id(self, molecule, species_name):
         # Use species_name to fetch the correct flux_id_map and then map molecule to reaction ID
@@ -285,7 +299,7 @@ class SpatialDFBA(Process):
                         for reaction_id in self.exchange_fluxes[species_id]:
                             if reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux
+                                updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux * timestep * updated_biomass[species_id][x, y]
                                 #print(updated_exchange_fluxes)
 
 
@@ -367,6 +381,7 @@ def test_spatial_dfba(
             'fields': ('fields',),
             'species': ('species',),
             'exchange_fluxes': ('exchange_fluxes',),
+            'dimensions': ('dimensions',),
         }}
     )
     sim.update(total_time)
