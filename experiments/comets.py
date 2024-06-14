@@ -15,68 +15,79 @@ comets_config = {
     'nbins': [2, 2],
 }
 
-def run_comets(comets_config):
+# Parameters shared by both processes
+shared_params = {
+    'bounds': comets_config['bounds'],
+    'nbins': comets_config['nbins'],
+    'molecules': ['glucose', 'oxygen'],
+}
 
-    # Parameters shared by both processes
-    shared_params = {
-        'bounds': comets_config['bounds'],
-        'nbins': comets_config['nbins'],
-        'molecules': ['glucose', 'oxygen'],
-    }
-
-    species_info = [
-        {
-            "name": "Alteromonas",
-            "model": '../data/Alteromonas_Model.xml',
-            "flux_id_map": {
-                "glucose": "EX_cpd00027_e0",
-                "oxygen": "EX_cpd00007_e0"
-            },
-            "kinetic_params": {
-                "glucose": (0.5, 0.0005),
-                "oxygen": (0.3, 0.0005),
-            },
-            "fixed_bounds": {
-                'EX_cpd00149_e0': (-10, 10)
-            }
+species_info = [
+    {
+        "name": "Alteromonas",
+        "model": '../data/Alteromonas_Model.xml',
+        "flux_id_map": {
+            "glucose": "EX_cpd00027_e0",
+            "oxygen": "EX_cpd00007_e0"
         },
-        {
-            "name": "ecoli",
-            "model": '../data/iECW_1372.xml',
-            "flux_id_map": {
-                "glucose": "EX_glc__D_e",
-                "oxygen": "EX_o2_e"
-            },
-            "kinetic_params": {
-                "glucose": (0.4, 0.6),
-                "oxygen": (0.25, 0.6),
-            },
-            "fixed_bounds": {
-                'EX_fe3dhbzs_e': (0, 10)
-            }
+        "kinetic_params": {
+            "glucose": (0.5, 0.0005),
+            "oxygen": (0.3, 0.0005),
+        },
+        "fixed_bounds": {
+            'EX_cpd00149_e0': (-10, 10)
         }
-    ]
-
-    # Specific parameters for Diffusion Field
-    diffusion_field_params = {
-        **shared_params,
-        'default_diffusion_dt': 0.001,
-        'default_diffusion_rate': 2E-5,
-        'diffusion': {
-            'glucose': 6.7E-1,
-            'oxygen': 2.0E-2,
+    },
+    {
+        "name": "ecoli",
+        "model": '../data/iECW_1372.xml',
+        "flux_id_map": {
+            "glucose": "EX_glc__D_e",
+            "oxygen": "EX_o2_e"
         },
-        'advection': {
-            'glucose': (0.01, 0.02),
-            'oxygen': (0.01, 0.01),
+        "kinetic_params": {
+            "glucose": (0.4, 0.6),
+            "oxygen": (0.25, 0.6),
+        },
+        "fixed_bounds": {
+            'EX_fe3dhbzs_e': (0, 10)
         }
     }
+]
 
-    # Specific parameters for Spatial DFBA
-    spatial_dfba_params = {
-        **shared_params,
-        'species_info': species_info
+# Specific parameters for Diffusion Field
+diffusion_field_params = {
+    **shared_params,
+    'default_diffusion_dt': 0.001,
+    'default_diffusion_rate': 2E-5,
+    'diffusion': {
+        'glucose': 6.7E-1,
+        'oxygen': 2.0E-2,
+    },
+    'advection': {
+        'glucose': (0.01, 0.02),
+        'oxygen': (0.01, 0.01),
     }
+}
+
+# Specific parameters for Spatial DFBA
+spatial_dfba_params = {
+    **shared_params,
+    'species_info': species_info
+}
+
+initial_state_config = {
+    'random': {
+        'glucose': 200.0,  # Max random value for glucose
+        'oxygen': 200.0,   # Max random value for oxygen
+        'species': {
+            'ecoli': 0.5,   # Max random value for E. coli biomass
+            'Alteromonas': 0.5   # Max random value for Alteromonas biomass
+        }
+    }
+}
+
+def run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initial_state_config):
 
     # create the two processes
     diffusion_field = DiffusionField(parameters=diffusion_field_params)
@@ -86,16 +97,6 @@ def run_comets(comets_config):
     initial_state_diffusion_field = diffusion_field.initial_state({'random': 1.0})
 
     # set the initial state for spatial dfba
-    initial_state_config = {
-        'random': {
-            'glucose': 200.0,  # Max random value for glucose
-            'oxygen': 200.0,   # Max random value for oxygen
-            'species': {
-                'ecoli': 0.5,   # Max random value for E. coli biomass
-                'Alteromonas': 0.5   # Max random value for Alteromonas biomass
-            }
-        }
-    }
     initial_state_spatial_dfba = spatial_dfba.initial_state(initial_state_config)
 
     # Merge the initial states
@@ -150,4 +151,4 @@ def run_comets(comets_config):
 
 
 if __name__ == '__main__':
-    run_comets(comets_config)
+    run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initial_state_config)
