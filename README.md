@@ -18,6 +18,20 @@ environments.
   
 
 
+
+
+
+
+
+-**[VivaComets Notebook](https://github.com/vivarium-collective/VivaComets/blob/main/notebooks/VivaComets.ipynb):** The VivaComets notebook integrates the functionalities of two previously developed notebooks to create a comprehensive simulation environment. This combined notebook accounts for the diffusion and advection of molecules and species biomass within a 3D environment. Additionally, it performs dynamic Flux Balance Analysis (dFBA) for organisms in this spatially structured environment.
+
+Key Features:
+
+-**Diffusion and Advection:** Models the movement and distribution of molecules and biomass through diffusion and advection processes, simulating realistic environmental interactions.
+-**Dynamic Flux Balance Analysis (dFBA):** Computes the growth and metabolic rates of organisms dynamically over time, considering the spatial distribution of resources and environmental conditions.
+-**3D Environment:** Simulates the interactions and growth of multiple species in a three-dimensional space, providing a more realistic and detailed analysis of ecological and metabolic dynamics.
+
+
 ## MIT License
 
 Copyright (c) 2024 Vivarium Lab
