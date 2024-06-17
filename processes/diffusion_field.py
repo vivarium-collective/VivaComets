@@ -40,7 +40,7 @@ class DiffusionField(Process):
     defaults = {
         'bounds': [20, 20],
         'nbins': [20, 20],
-        "depth": 1, 
+        'depth': 1,
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas', 'ecoli'],
         'default_diffusion_dt': 0.001,
@@ -90,9 +90,7 @@ class DiffusionField(Process):
         # Check that edge clamp values are provided for all molecules
         if isinstance(self.parameters['clamp_edges'], dict):
             for key in self.parameters['clamp_edges'].keys():
-                assert key in self.molecule_ids, f'clamp edge key {key} not in molecules'
-
-
+                assert (key in self.molecule_ids or key in self.species_ids), f'clamp edge key {key} not in molecules or species'
 
     def initial_state(self, config=None):
         """get initial state of the fields
@@ -145,15 +143,30 @@ class DiffusionField(Process):
         schema = {
             'species': {},
             'fields': {},
+            'dimensions': {
+                'bounds': {
+                    '_value': self.bounds,
+                    '_updater': 'set',
+                    '_emit': True
+                },
+                'nbins': {
+                    '_value': self.nbins,
+                    '_updater': 'set',
+                    '_emit': True
+                }
+            }
         }
+
+        # fill in the species
         for species in self.parameters['species']:
             schema['species'].update({
                 species: {
                     '_default': np.ones(self.nbins),
                     '_updater': 'nonnegative_accumulate',
                     '_emit': True
-                }
-            })
+                }})
+
+        # fill in the fields
         for mol in self.parameters['molecules']:
             schema['fields'].update({
                 mol: {
@@ -162,38 +175,46 @@ class DiffusionField(Process):
                     '_emit': True
                 }
             })
-        schema['dimensions'] = {
-            'bounds': {
-                '_value': self.bounds,
-                '_updater': 'set',
-                '_emit': True
-            },
-            'nbins': {
-                '_value': self.nbins,
-                '_updater': 'set',
-                '_emit': True
-            }
-        }
         return schema
 
     def next_update(self, timestep, states):
+        # get the input states
         combined_dict = {**states['fields'], **states['species']}
         combined_new = copy.deepcopy(combined_dict)
+
+        # update the fields
         for mol_id, field in combined_dict.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
+
             if np.var(field) > 0:  # If field is not uniform
-                combined_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector)
-            # Clamp edges if clamp_edges is specified for the molecule
-            if mol_id in self.parameters['clamp_edges']:
-                clamp_value = self.parameters['clamp_edges'][mol_id]
-                combined_new[mol_id][0, :] = clamp_value
-                combined_new[mol_id][-1, :] = clamp_value
-                combined_new[mol_id][:, 0] = clamp_value
-                combined_new[mol_id][:, -1] = clamp_value
-        delta_fields = {mol_id: combined_new[mol_id] - field for mol_id, field in states['fields'].items()}
-        delta_species = {spec_id: combined_new[spec_id] - field for spec_id, field in states['species'].items()}
-        return {'fields': delta_fields, 'species': delta_species}
+                clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
+                combined_new[mol_id] = self.diffuse(
+                    field, timestep, diffusion_rate, advection_vector, constant_value=clamp_value)
+
+            # # Clamp edges if clamp_edges is specified for the molecule
+            # if mol_id in self.parameters['clamp_edges']:
+            #     clamp_value = self.parameters['clamp_edges'][mol_id]
+            #     combined_new[mol_id][0, :] = clamp_value
+            #     combined_new[mol_id][-1, :] = clamp_value
+            #     combined_new[mol_id][:, 0] = clamp_value
+            #     combined_new[mol_id][:, -1] = clamp_value
+
+        # get deltas for fields and species
+        delta_fields = {
+            mol_id: combined_new[mol_id] - field
+            for mol_id, field in states['fields'].items()
+        }
+        delta_species = {
+            spec_id: combined_new[spec_id] - field
+            for spec_id, field in states['species'].items()
+        }
+
+        # return the update
+        return {
+            'fields': delta_fields,
+            'species': delta_species
+        }
 
     def get_bin_site(self, location):
         return get_bin_site(
@@ -207,7 +228,7 @@ class DiffusionField(Process):
     def random_field(self):
         return np.random.rand(*self.nbins)
 
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector):
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector, constant_value=0.0):
         if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
@@ -220,9 +241,9 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            laplacian = convolve(field, laplacian_kernel, mode='constant') * diffusion_rate   
-            grad_x = convolve(field, gradient_x_kernel, mode='constant') * advection_vector[0]
-            grad_y = convolve(field, gradient_y_kernel, mode='constant') * advection_vector[1]
+            laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
+            grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
+            grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
             field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field

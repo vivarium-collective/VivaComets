@@ -1,9 +1,94 @@
 import os
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import numpy as np
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
+import imageio.v2 as imageio
+import io
+import base64
+from IPython.display import display, HTML
 
+
+def plot_fields_temporal_to_gif(
+        fields_data,
+        species_data,
+        desired_time_points,
+        actual_time_points,
+        filename='fields_over_time.gif',
+        molecule_colormaps={'glucose': 'YlOrBr', 'oxygen': 'Blues'},  # Specify color maps for each molecule
+        species_colormaps={'Alteromonas': 'Greens', 'ecoli': 'Reds'},  # Specify color maps for each species
+        plot_fields=["glucose", "oxygen"],
+        plot_species=["Alteromonas", "ecoli"],
+        skip_frames=1,  # TODO -- maybe this should be used to skip frames
+):
+    if not os.path.exists('temp'):
+        os.makedirs('temp', exist_ok=True)
+
+    # Convert desired and actual time points to float for accurate indexing
+    desired_time_points = [float(time) for time in desired_time_points]
+    actual_time_points = [float(time) for time in actual_time_points]
+    num_molecules = len(plot_fields)
+    num_species = len(plot_species)
+    num_times = len(desired_time_points)
+    images = []
+
+    # Calculate global min/max for each molecule and species across all timepoints
+    global_min_max = {}
+    for data_dict, colormaps, plot_items in zip(
+            [fields_data, species_data],
+            [molecule_colormaps, species_colormaps],
+            [plot_fields, plot_species]):
+        for item in data_dict.keys():
+            if item not in plot_items:
+                continue
+            all_data = np.concatenate([np.array(times_data) for times_data in data_dict[item]], axis=0)
+            global_min_max[item] = (np.min(all_data), np.max(all_data))
+
+    for time_idx, desired_time in enumerate(desired_time_points):
+        if desired_time in actual_time_points:
+            actual_idx = actual_time_points.index(desired_time)
+            fig, axs = plt.subplots(2, max(num_molecules, num_species), figsize=(15, 10), squeeze=False)
+
+            for mol_idx, molecule in enumerate(plot_fields):
+                data_array = np.array(fields_data[molecule][actual_idx])  # Accessing the time-specific data
+                ax = axs[0, mol_idx]
+                cmap = molecule_colormaps.get(molecule, 'viridis')  # Default to 'viridis' if molecule not in dict
+                vmin, vmax = global_min_max[molecule]  # Use global min/max
+                cax = ax.imshow(data_array, cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax)
+                ax.set_title(f'{molecule} at Time {desired_time}', fontsize=12)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                # Add a colorbar for each subplot
+                cb = fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
+                cb.ax.tick_params(labelsize=10)
+
+            for spec_idx, species in enumerate(plot_species):
+                data_array = np.array(species_data[species][actual_idx])  # Accessing the time-specific data
+                ax = axs[1, spec_idx]
+                cmap = species_colormaps.get(species, 'viridis')  # Default to 'viridis' if species not in dict
+                vmin, vmax = global_min_max[species]  # Use global min/max
+                cax = ax.imshow(data_array, cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax)
+                ax.set_title(f'{species} at Time {desired_time}', fontsize=12)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                # Add a colorbar for each subplot
+                cb = fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
+                cb.ax.tick_params(labelsize=10)
+
+            plt.tight_layout()
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=120)
+            buf.seek(0)
+            images.append(imageio.imread(buf))
+            buf.close()
+            plt.close(fig)
+
+    # Create and save the GIF with loop=0 for infinite loop
+    imageio.mimsave(filename, images, duration=0.5, loop=0)
+
+    # Optionally display the GIF in a Jupyter notebook
+    with open(filename, 'rb') as file:
+        data = file.read()
+        data_url = 'data:image/gif;base64,' + base64.b64encode(data).decode()
+    display(HTML(f'<img src="{data_url}" alt="Fields Over Time" style="max-width:100%;"/>'))
 
 def save_fig_to_dir(
         fig,

@@ -5,12 +5,9 @@ Spatial DFBA
 """
 import os
 import numpy as np
-from matplotlib import pyplot as plt
 from vivarium.core.process import Process
 from vivarium.core.engine import Engine
 from processes.diffusion_field import get_bin_volume
-import inspect
-from plots.field import plot_objective_flux, plot_fields_temporal
 from cobra.io import read_sbml_model
 import logging
 import warnings
@@ -30,6 +27,7 @@ cobra_logger.setLevel(logging.ERROR)
 script_dir = os.path.dirname(__file__)
 data_dir = os.path.join(script_dir, '../data')
 
+
 class SpatialDFBA(Process):
     """
     SpatialDFBA
@@ -45,7 +43,7 @@ class SpatialDFBA(Process):
     defaults = {
         'bounds': [3, 3],  # cm
         'nbins': [3, 3],
-        "depth": 0.01, 
+        'depth': 0.01,
         'molecules': [
             'glucose',
             'oxygen'
@@ -62,36 +60,42 @@ class SpatialDFBA(Process):
     def __init__(self, parameters=None):
         super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
-        self.species_ids = {info['name']: info['model'] for info in self.parameters.get('species_info', [])}
+        self.species_ids = {
+            info['name']: info['model']
+            for info in self.parameters.get('species_info', [])
+        }
         
         # spatial setting
         self.bounds = self.parameters['bounds']
-        assert len(self.bounds) == 2, "This process ONLY supports 2D, you can change the bounds parameters to have more or less than 2D"
+        assert len(self.bounds) == 2, ('This process ONLY supports 2D, you can change the bounds parameters to have '
+                                       'more or less than 2D')
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
-        self.bin_volume = get_bin_volume(self.bin_size, self.parameters["depth"])
+        self.bin_volume = get_bin_volume(self.bin_size, self.parameters['depth'])
 
         # load FBA Model
         self.models = {}
         self.flux_id_maps = {}
         self.kinetic_params = {}
         self.exchange_fluxes = {}
+
+        # load a model for each species
         for species in self.parameters.get('species_info', []):
             model_path = species['model']
             species_name = species['name']
             
             self.models[species_name] = read_sbml_model(model_path)
-            print(f"Loaded model for {species_name}")
-            self.flux_id_maps[species_name] = species['flux_id_map']
-            self.kinetic_params[species_name] = species['kinetic_params']
+            print(f'Loaded model for {species_name}')
+            self.flux_id_maps[species_name] = species.get('flux_id_map', {})
+            self.kinetic_params[species_name] = species.get('kinetic_params', {})
 
             # Initialize exchange fluxes 
             self.exchange_fluxes[species_name] = {
                 reaction.id: {
-                    'name': reaction.name,
-                    'reaction': str(reaction.reaction),
-                    'lower_bound': reaction.lower_bound,
-                    'upper_bound': reaction.upper_bound,
+                    'name': reaction.name,                # TODO -- this should be removed, as it is redundant
+                    'reaction': str(reaction.reaction),   # TODO -- this should be removed, as it is redundant
+                    'lower_bound': reaction.lower_bound,  # TODO -- this should be removed, as it is redundant
+                    'upper_bound': reaction.upper_bound,  # TODO -- this should be removed, as it is redundant
                     'flux': np.zeros(self.nbins)
                 } for reaction in self.models[species_name].exchanges
             }
@@ -104,11 +108,10 @@ class SpatialDFBA(Process):
                         reaction.lower_bound = lb
                         reaction.upper_bound = ub
 
-
     def initial_state(self, config=None):
         if config is None:
             config = {}
-            print("Warning: No configuration provided, initializing to default zero values.")
+            print('Warning: No configuration provided, initializing to default zero values.')
 
         fields = {}
         species = {}
@@ -171,25 +174,25 @@ class SpatialDFBA(Process):
             # Define schema for exchange fluxes with additional information
             schema['exchange_fluxes'][species_name] = {
                 reaction_id: {
-                    'name': {
+                    'name': {  # TODO -- this should be removed, as it is redundant
                         '_default': self.exchange_fluxes[species_name][reaction_id]['name'],
                         '_updater': 'set',
                         '_emit': True,
                         '_output': True
                     },
-                    'reaction': {
+                    'reaction': {  # TODO -- this should be removed, as it is redundant
                         '_default': self.exchange_fluxes[species_name][reaction_id]['reaction'],
                         '_updater': 'set',
                         '_emit': True,
                         '_output': True
                     },
-                    'lower_bound': {
+                    'lower_bound': {  # TODO -- this should be removed, as it is redundant
                         '_default': self.exchange_fluxes[species_name][reaction_id]['lower_bound'],
                         '_updater': 'set',
                         '_emit': True,
                         '_output': True
                     },
-                    'upper_bound': {
+                    'upper_bound': {  # TODO -- this should be removed, as it is redundant
                         '_default': self.exchange_fluxes[species_name][reaction_id]['upper_bound'],
                         '_updater': 'set',
                         '_emit': True,
@@ -204,7 +207,7 @@ class SpatialDFBA(Process):
                 } for reaction_id in self.exchange_fluxes[species_name]
             }
 
-        # Define schema for each molecule listed in the parameters
+        # add all the fields to molecules
         for molecule in self.parameters['molecules']:
             schema['fields'][molecule] = {
                 '_default': np.zeros(self.nbins),  # Initialize to zero concentration
@@ -213,7 +216,6 @@ class SpatialDFBA(Process):
             }
 
         return schema
-
 
     def get_reaction_id(self, molecule, species_name):
         # Use species_name to fetch the correct flux_id_map and then map molecule to reaction ID
@@ -232,7 +234,6 @@ class SpatialDFBA(Process):
             return species_info['kinetic_params'].get(molecule_name)
         return None
 
-    #calculate FBA for this species in this location
     def next_update(self, timestep, states):
         """
         The main process update method. This method is called by the Vivarium engine at each timestep.
@@ -248,17 +249,16 @@ class SpatialDFBA(Process):
         updated_exchange_fluxes = {
             species_id: {
                 reaction.id: {
-                    'name': reaction.name,
-                    'reaction': reaction.reaction,
-                    'lower_bound': reaction.lower_bound,
-                    'upper_bound': reaction.upper_bound,
+                    'name': reaction.name,                # TODO -- this should be removed, as it is redundant
+                    'reaction': reaction.reaction,        # TODO -- this should be removed, as it is redundant
+                    'lower_bound': reaction.lower_bound,  # TODO -- this should be removed, as it is redundant
+                    'upper_bound': reaction.upper_bound,  # TODO -- this should be removed, as it is redundant
                     'flux': np.zeros(self.nbins)
                 } for reaction in self.models[species_id].exchanges
             } for species_id in species_states.keys()
         }
 
-
-
+        # iterate over each species and update biomass and fields
         for species_id, species_array in species_states.items():
             if species_id not in self.models:
                 print(f"Model for {species_id} not found")
@@ -266,12 +266,15 @@ class SpatialDFBA(Process):
 
             species_model = self.models[species_id] 
 
+            # iterate over each bin in the grid
+            # TODO -- this can be parallelized
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
+                    # get the local fields at this bin and the species biomass
                     local_fields = {field_id: field_array[x, y] for field_id, field_array in field_states.items()}
                     species_biomass = species_array[x, y]
 
-                    # Update uptake rates based on local conditions and kinetic parameters
+                    # Update uptake rates based on local fields and kinetic parameters
                     for molecule_name, local_concentration in local_fields.items():
                         kinetic_params = self.get_kinetic_params(species_id, molecule_name)
                         if kinetic_params:
@@ -280,11 +283,14 @@ class SpatialDFBA(Process):
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id:
                                 reaction = species_model.reactions.get_by_id(reaction_id)
-                                initial_lower_bound = reaction.lower_bound  # Store the initial lower bound
+                                initial_lower_bound = reaction.lower_bound
                                 # Update the reaction lower bound to the uptake rate
                                 reaction.lower_bound = max(initial_lower_bound, -uptake_rate)
 
+                    # run FBA
                     solution = species_model.optimize()
+
+                    # get the solutions
                     if solution.status == 'optimal':
                         objective_flux = solution.objective_value
                         biomass_update = objective_flux * species_biomass * timestep
@@ -296,13 +302,11 @@ class SpatialDFBA(Process):
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
                                 updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep * updated_biomass[species_id][x, y]
-                        # Update exchange fluxes        
+                        # update exchange fluxes
                         for reaction_id in self.exchange_fluxes[species_id]:
                             if reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux * timestep * updated_biomass[species_id][x, y]
-                                #print(updated_exchange_fluxes)
-
+                                updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux  #* timestep * updated_biomass[species_id][x, y]
 
         return {
             'species': updated_biomass, 
@@ -370,6 +374,19 @@ def test_spatial_dfba(
 
     # create the process
     fba_process = SpatialDFBA(config)
+
+    # get exchange data from the process
+    species_ids = [info['name'] for info in config.get('species_info', [])]
+    exchange_fluxes_info = {
+        species_id: {
+            reaction.id: {
+                'name': reaction.name,
+                'reaction': reaction.reaction,
+                'lower_bound': reaction.lower_bound,
+                'upper_bound': reaction.upper_bound,
+            } for reaction in fba_process.models[species_id].exchanges
+        } for species_id in species_ids
+    }
 
     # initial state
     initial_state = fba_process.initial_state(initial_state_config)
