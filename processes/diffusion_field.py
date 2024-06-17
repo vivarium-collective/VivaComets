@@ -56,6 +56,10 @@ class DiffusionField(Process):
             'oxygen': (0.01, 0.01),
             'Alteromonas': (0.01, 0.01), 
             'ecoli': (0.01, 0.01)    
+        },
+        'clamp_edges': {
+            'glucose': 1.0, 
+            'oxygen': 0.0,
         }
     }
 
@@ -83,6 +87,11 @@ class DiffusionField(Process):
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
         self.diffusion_dt = min(diffusion_dt, self.parameters['default_diffusion_dt'])
         self.bin_volume = get_bin_volume(self.bin_size, self.parameters["depth"])
+        # Check that edge clamp values are provided for all molecules
+        if isinstance(self.parameters['clamp_edges'], dict):
+            for key in self.parameters['clamp_edges'].keys():
+                assert key in self.molecule_ids, f'clamp edge key {key} not in molecules'
+
 
 
     def initial_state(self, config=None):
@@ -175,6 +184,13 @@ class DiffusionField(Process):
             advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
             if np.var(field) > 0:  # If field is not uniform
                 combined_new[mol_id] = self.diffuse(field, timestep, diffusion_rate, advection_vector)
+            # Clamp edges if clamp_edges is specified for the molecule
+            if mol_id in self.parameters['clamp_edges']:
+                clamp_value = self.parameters['clamp_edges'][mol_id]
+                combined_new[mol_id][0, :] = clamp_value
+                combined_new[mol_id][-1, :] = clamp_value
+                combined_new[mol_id][:, 0] = clamp_value
+                combined_new[mol_id][:, -1] = clamp_value
         delta_fields = {mol_id: combined_new[mol_id] - field for mol_id, field in states['fields'].items()}
         delta_species = {spec_id: combined_new[spec_id] - field for spec_id, field in states['species'].items()}
         return {'fields': delta_fields, 'species': delta_species}
