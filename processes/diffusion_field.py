@@ -220,9 +220,9 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            laplacian = convolve(field, laplacian_kernel, mode='reflect') * diffusion_rate   #TODO put bondary 
-            grad_x = convolve(field, gradient_x_kernel, mode='reflect') * advection_vector[0]
-            grad_y = convolve(field, gradient_y_kernel, mode='reflect') * advection_vector[1]
+            laplacian = convolve(field, laplacian_kernel, mode='constant') * diffusion_rate   
+            grad_x = convolve(field, gradient_x_kernel, mode='constant') * advection_vector[0]
+            grad_y = convolve(field, gradient_y_kernel, mode='constant') * advection_vector[1]
             field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field
