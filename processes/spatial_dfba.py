@@ -16,7 +16,8 @@ import logging
 import warnings
 
 # Suppress warnings
-warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning, module="cobra.util.solver")
+warnings.filterwarnings("ignore", category=FutureWarning, module="cobra.medium.boundary_types")
 
 # Suppress logging warnings
 logging.getLogger('matplotlib').setLevel(logging.ERROR)
