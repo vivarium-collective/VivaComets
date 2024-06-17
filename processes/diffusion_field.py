@@ -48,10 +48,14 @@ class DiffusionField(Process):
         'diffusion': {
             'glucose': 6.7E-1,
             'oxygen': 2.0E-2,
+            'Alteromonas': 1.0E-2, 
+            'ecoli': 1.0E-2 
         },
         'advection': {
             'glucose': (0.01, 0.02),  
-            'oxygen': (0.01, 0.01),   
+            'oxygen': (0.01, 0.01),
+            'Alteromonas': (0.01, 0.01), 
+            'ecoli': (0.01, 0.01)    
         }
     }
 
@@ -216,12 +220,16 @@ def test_fields():
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas', 'ecoli'],
         'diffusion': {
-            'glucose': 6.7E-1,     # 6.7E-6,  # cm^2/s
-            'oxygen':  2.0E-2,     # 2.0E-5,  # cm^2/s
+            'glucose': 6.7E-1,      # cm^2/s
+            'oxygen':  2.0E-2,      # cm^2/s
+            'Alteromonas': 1.0E-2, # diffusion rate for Alteromonas
+            'ecoli': 1.0E-2  
         },
         'advection': {
             'glucose': (0.01, 0.02),  # Advection vector for glucose
             'oxygen': (0.01, 0.01),   # Advection vector for oxygen
+            'Alteromonas': (0.01, 0.01), # advection vector for Alteromonas
+            'ecoli': (0.01, 0.01)
         }
     }
 
