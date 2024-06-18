@@ -30,7 +30,9 @@ def get_bin_site(location, n_bins, bounds):
 
 def get_bin_volume(bin_size, depth=1):
     dimensions = bin_size + [depth]
-    return np.prod(dimensions)
+    volume = np.prod(dimensions)
+    assert volume > 0, f'Volume of bin is {volume}'
+    return volume
 
 
 class DiffusionField(Process):

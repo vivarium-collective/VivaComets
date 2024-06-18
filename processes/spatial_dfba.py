@@ -52,7 +52,7 @@ class SpatialDFBA(Process):
             {
                 'name': 'Alteromonas',
                 'model': os.path.join(data_dir, 'Alteromonas_Model.xml'),
-                # 'fixed_bounds': {'reaction_name': (lb, ub)}
+                # 'fixed_bounds': {'reaction_name': {'lower': -100, 'upper': 100}},
             }
         ],
     }
@@ -67,11 +67,11 @@ class SpatialDFBA(Process):
         
         # spatial setting
         self.bounds = self.parameters['bounds']
-        assert len(self.bounds) == 2, ('This process ONLY supports 2D, you can change the bounds parameters to have '
-                                       'more or less than 2D')
+        assert len(self.bounds) == 2, 'This process ONLY supports 2D, change the bounds parameters'
         self.nbins = self.parameters['nbins']
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         self.bin_volume = get_bin_volume(self.bin_size, self.parameters['depth'])
+        # print(f"Bin volume: {self.bin_volume}")
 
         # load FBA Model
         self.models = {}
@@ -91,22 +91,21 @@ class SpatialDFBA(Process):
 
             # Initialize exchange fluxes 
             self.exchange_fluxes[species_name] = {
-                reaction.id: {
-                    'name': reaction.name,                # TODO -- this should be removed, as it is redundant
-                    'reaction': str(reaction.reaction),   # TODO -- this should be removed, as it is redundant
-                    'lower_bound': reaction.lower_bound,  # TODO -- this should be removed, as it is redundant
-                    'upper_bound': reaction.upper_bound,  # TODO -- this should be removed, as it is redundant
-                    'flux': np.zeros(self.nbins)
-                } for reaction in self.models[species_name].exchanges
+                reaction.id: np.zeros(self.nbins)
+                for reaction in self.models[species_name].exchanges
             }
 
             # Apply fixed bounds
             if 'fixed_bounds' in species:
-                for reaction_id, (lb, ub) in species['fixed_bounds'].items():
+                for reaction_id, bounds in species['fixed_bounds'].items():
+                    lb = bounds.get('lower', None)
+                    ub = bounds.get('upper', None)
                     if reaction_id in self.models[species_name].reactions:
                         reaction = self.models[species_name].reactions.get_by_id(reaction_id)
-                        reaction.lower_bound = lb
-                        reaction.upper_bound = ub
+                        if lb is not None:
+                            reaction.lower_bound = lb
+                        if ub is not None:
+                            reaction.upper_bound = ub
 
     def initial_state(self, config=None):
         if config is None:
@@ -174,36 +173,10 @@ class SpatialDFBA(Process):
             # Define schema for exchange fluxes with additional information
             schema['exchange_fluxes'][species_name] = {
                 reaction_id: {
-                    'name': {  # TODO -- this should be removed, as it is redundant
-                        '_default': self.exchange_fluxes[species_name][reaction_id]['name'],
-                        '_updater': 'set',
-                        '_emit': True,
-                        '_output': True
-                    },
-                    'reaction': {  # TODO -- this should be removed, as it is redundant
-                        '_default': self.exchange_fluxes[species_name][reaction_id]['reaction'],
-                        '_updater': 'set',
-                        '_emit': True,
-                        '_output': True
-                    },
-                    'lower_bound': {  # TODO -- this should be removed, as it is redundant
-                        '_default': self.exchange_fluxes[species_name][reaction_id]['lower_bound'],
-                        '_updater': 'set',
-                        '_emit': True,
-                        '_output': True
-                    },
-                    'upper_bound': {  # TODO -- this should be removed, as it is redundant
-                        '_default': self.exchange_fluxes[species_name][reaction_id]['upper_bound'],
-                        '_updater': 'set',
-                        '_emit': True,
-                        '_output': True
-                    },
-                    'flux': {
                         '_default': np.zeros(self.nbins),
                         '_updater': 'set',
                         '_emit': True,
                         '_output': True
-                    }
                 } for reaction_id in self.exchange_fluxes[species_name]
             }
 
@@ -248,13 +221,8 @@ class SpatialDFBA(Process):
         updated_fields = {field_id: np.zeros(self.nbins) for field_id in field_states.keys()}
         updated_exchange_fluxes = {
             species_id: {
-                reaction.id: {
-                    'name': reaction.name,                # TODO -- this should be removed, as it is redundant
-                    'reaction': reaction.reaction,        # TODO -- this should be removed, as it is redundant
-                    'lower_bound': reaction.lower_bound,  # TODO -- this should be removed, as it is redundant
-                    'upper_bound': reaction.upper_bound,  # TODO -- this should be removed, as it is redundant
-                    'flux': np.zeros(self.nbins)
-                } for reaction in self.models[species_id].exchanges
+                reaction.id: np.zeros(self.nbins)
+                for reaction in self.models[species_id].exchanges
             } for species_id in species_states.keys()
         }
 
@@ -271,7 +239,9 @@ class SpatialDFBA(Process):
             for x in range(self.nbins[0]):
                 for y in range(self.nbins[1]):
                     # get the local fields at this bin and the species biomass
-                    local_fields = {field_id: field_array[x, y] for field_id, field_array in field_states.items()}
+                    local_fields = {
+                        field_id: field_array[x, y]
+                        for field_id, field_array in field_states.items()}
                     species_biomass = species_array[x, y]
 
                     # Update uptake rates based on local fields and kinetic parameters
@@ -283,12 +253,14 @@ class SpatialDFBA(Process):
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id:
                                 reaction = species_model.reactions.get_by_id(reaction_id)
-                                initial_lower_bound = reaction.lower_bound
-                                # Update the reaction lower bound to the uptake rate
-                                reaction.lower_bound = max(initial_lower_bound, -uptake_rate)
+                                reaction.lower_bound = -uptake_rate
 
                     # run FBA
                     solution = species_model.optimize()
+
+
+                    print(f"Species: {species_id}, Bin: ({x}, {y}), Objective: {solution.objective_value}, Status: {solution.status}")
+
 
                     # get the solutions
                     if solution.status == 'optimal':
@@ -301,13 +273,13 @@ class SpatialDFBA(Process):
                             reaction_id = self.get_reaction_id(molecule_name, species_id)
                             if reaction_id and reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_fields[molecule_name][x, y] += flux * self.bin_volume * timestep * updated_biomass[species_id][x, y]
+                                delta_conc = flux * self.bin_volume * timestep * updated_biomass[species_id][x,y]
+                                updated_fields[molecule_name][x, y] += delta_conc
                         # update exchange fluxes
                         for reaction_id in self.exchange_fluxes[species_id]:
                             if reaction_id in solution.fluxes.index:
                                 flux = solution.fluxes[reaction_id]
-                                updated_exchange_fluxes[species_id][reaction_id]['flux'][x, y] = flux  #* timestep * updated_biomass[species_id][x, y]
-
+                                updated_exchange_fluxes[species_id][reaction_id][x, y] = flux  #* timestep * updated_biomass[species_id][x, y]
         return {
             'species': updated_biomass, 
             'fields': updated_fields,
@@ -351,7 +323,7 @@ def test_spatial_dfba(
                     "oxygen": (0.3,  0.0005),   # Km, Vmax for oxygen
                 },
                 "fixed_bounds": {
-                    'EX_cpd00149_e0': (-10, 10)  # Setting fixed bounds for Alteromonas
+                    'EX_cpd00149_e0': {'lower': -10, 'upper': 10}   # Setting fixed bounds for Alteromonas
                 }
             },
             {
@@ -366,7 +338,9 @@ def test_spatial_dfba(
                     "oxygen": (0.25, 0.6),  # Km, Vmax for oxygen
                 },
                 "fixed_bounds": {
-                    'EX_fe3dhbzs_e': (0, 10)  # Setting fixed bounds for E. coli
+                    'EX_o2_e': {'lower': -2},  # Setting fixed bounds for E. coli
+                    'ATPM': {'lower': 1, 'upper': 1}  # Setting fixed bounds for E. coli
+                    # 'EX_fe3dhbzs_e': {'lower': 0, 'upper': 10}
                 }
             }
         ]
