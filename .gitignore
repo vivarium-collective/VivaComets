@@ -25,3 +25,4 @@ out/
 .python-version
 .ipynb_checkpoints/
 myenv/
+*.gif
