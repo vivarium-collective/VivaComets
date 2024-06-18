@@ -31,6 +31,7 @@ def get_bin_site(location, n_bins, bounds):
 def get_bin_volume(bin_size, depth=1):
     dimensions = bin_size + [depth]
     volume = np.prod(dimensions)
+    # print(f'Volume of bin is {volume}, dimensions are {dimensions}')
     assert volume > 0, f'Volume of bin is {volume}'
     return volume
 
@@ -54,10 +55,10 @@ class DiffusionField(Process):
             'ecoli': 1.0E-2 
         },
         'advection': {
-            'glucose': (0.01, 0.02),  
-            'oxygen': (0.01, 0.01),
-            'Alteromonas': (0.01, 0.01), 
-            'ecoli': (0.01, 0.01)    
+            'glucose': (0.0, 0.0),
+            # 'oxygen': (0.01, 0.01),
+            # 'Alteromonas': (0.01, 0.01),
+            # 'ecoli': (0.01, 0.01)
         },
         'clamp_edges': {
             'glucose': 1.0, 
@@ -192,15 +193,9 @@ class DiffusionField(Process):
             if np.var(field) > 0:  # If field is not uniform
                 clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
                 combined_new[mol_id] = self.diffuse(
-                    field, timestep, diffusion_rate, advection_vector, constant_value=clamp_value)
-
-            # # Clamp edges if clamp_edges is specified for the molecule
-            # if mol_id in self.parameters['clamp_edges']:
-            #     clamp_value = self.parameters['clamp_edges'][mol_id]
-            #     combined_new[mol_id][0, :] = clamp_value
-            #     combined_new[mol_id][-1, :] = clamp_value
-            #     combined_new[mol_id][:, 0] = clamp_value
-            #     combined_new[mol_id][:, -1] = clamp_value
+                    field, timestep,
+                    diffusion_rate, advection_vector,
+                    constant_value=clamp_value)
 
         # get deltas for fields and species
         delta_fields = {
@@ -230,7 +225,7 @@ class DiffusionField(Process):
     def random_field(self):
         return np.random.rand(*self.nbins)
 
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector, constant_value=0.0):
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector, constant_value=None):
         if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
@@ -243,9 +238,16 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
-            grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
-            grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
+            if constant_value:
+                laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
+                grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
+            else:
+                laplacian = convolve(field, laplacian_kernel, mode='nearest') * diffusion_rate
+                grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
+
+
             field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field

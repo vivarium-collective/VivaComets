@@ -13,20 +13,25 @@ def plot_fields_temporal_to_gif(
         desired_time_points,
         actual_time_points,
         filename='fields_over_time.gif',
-        molecule_colormaps={'glucose': 'YlOrBr', 'oxygen': 'Blues'},  # Specify color maps for each molecule
+        molecule_colormaps={'glucose': 'YlOrBr', 'acetate': 'Blues', 'oxygen': 'Blues'},  # Specify color maps for each molecule
         species_colormaps={'Alteromonas': 'Greens', 'ecoli': 'Reds'},  # Specify color maps for each species
-        plot_fields=["glucose", "oxygen"],
-        plot_species=["Alteromonas", "ecoli"],
+        plot_fields=None,
+        plot_species=None,
         skip_frames=1,  # TODO -- maybe this should be used to skip frames
 ):
     if not os.path.exists('temp'):
         os.makedirs('temp', exist_ok=True)
 
+    if not plot_fields:
+        plot_fields = list(fields_data.keys())
+    if not plot_species:
+        plot_species = list(species_data.keys())
+
     # Convert desired and actual time points to float for accurate indexing
     desired_time_points = [float(time) for time in desired_time_points]
     actual_time_points = [float(time) for time in actual_time_points]
-    num_molecules = len(plot_fields)
-    num_species = len(plot_species)
+    num_molecules = len(plot_fields) if plot_fields else len(fields_data)
+    num_species = len(plot_species) if plot_species else len(species_data)
     num_times = len(desired_time_points)
     images = []
 
@@ -207,7 +212,7 @@ def plot_fields_temporal(
         out_dir='out',
         filename='fields_at_z',
         molecule_colormaps={},
-        plot_fields=["glucose" , "oxygen"]
+        plot_fields=["glucose" , "acetate"]
 ):
 
     if not os.path.exists(out_dir):
