@@ -62,7 +62,7 @@ class DiffusionField(Process):
         },
         'clamp_edges': {
             'glucose': 1.0, 
-            'oxygen': 0.0,
+            'acetate': 0.0,
         }
     }
 
