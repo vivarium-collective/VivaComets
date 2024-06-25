@@ -14,7 +14,7 @@ def plot_fields_temporal_to_gif(
         actual_time_points,
         filename='fields_over_time.gif',
         molecule_colormaps={'glucose': 'YlOrBr', 'acetate': 'Blues', 'oxygen': 'Blues'},  # Specify color maps for each molecule
-        species_colormaps={'Alteromonas': 'Greens', 'ecoli': 'Reds'},  # Specify color maps for each species
+        species_colormaps={'Thermotoga': 'Greens', 'ecoli': 'Reds'},  # Specify color maps for each species
         plot_fields=None,
         plot_species=None,
         skip_frames=1,  # TODO -- maybe this should be used to skip frames
@@ -50,11 +50,19 @@ def plot_fields_temporal_to_gif(
     for time_idx, desired_time in enumerate(desired_time_points):
         if desired_time in actual_time_points:
             actual_idx = actual_time_points.index(desired_time)
-            fig, axs = plt.subplots(2, max(num_molecules, num_species), figsize=(15, 10), squeeze=False)
+            
+            # Calculate the number of rows needed
+            num_columns = 3
+            total_plots = num_molecules + num_species
+            num_rows = (total_plots + num_columns - 1) // num_columns  # Ceiling division
+            
+            fig, axs = plt.subplots(num_rows, num_columns, figsize=(15, num_rows * 5), squeeze=False)
 
             for mol_idx, molecule in enumerate(plot_fields):
+                row = mol_idx // num_columns
+                col = mol_idx % num_columns
                 data_array = np.array(fields_data[molecule][actual_idx])  # Accessing the time-specific data
-                ax = axs[0, mol_idx]
+                ax = axs[row, col]
                 cmap = molecule_colormaps.get(molecule, 'viridis')  # Default to 'viridis' if molecule not in dict
                 vmin, vmax = global_min_max[molecule]  # Use global min/max
                 cax = ax.imshow(data_array, cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax)
@@ -66,8 +74,10 @@ def plot_fields_temporal_to_gif(
                 cb.ax.tick_params(labelsize=10)
 
             for spec_idx, species in enumerate(plot_species):
+                row = (num_molecules + spec_idx) // num_columns
+                col = (num_molecules + spec_idx) % num_columns
                 data_array = np.array(species_data[species][actual_idx])  # Accessing the time-specific data
-                ax = axs[1, spec_idx]
+                ax = axs[row, col]
                 cmap = species_colormaps.get(species, 'viridis')  # Default to 'viridis' if species not in dict
                 vmin, vmax = global_min_max[species]  # Use global min/max
                 cax = ax.imshow(data_array, cmap=cmap, interpolation='nearest', vmin=vmin, vmax=vmax)
@@ -78,6 +88,10 @@ def plot_fields_temporal_to_gif(
                 cb = fig.colorbar(cax, ax=ax, fraction=0.046, pad=0.04)
                 cb.ax.tick_params(labelsize=10)
 
+            # Hide any unused subplots
+            for i in range(total_plots, num_rows * num_columns):
+                fig.delaxes(axs[i // num_columns, i % num_columns])
+            
             plt.tight_layout()
             buf = io.BytesIO()
             plt.savefig(buf, format='png', dpi=120)
@@ -85,6 +99,8 @@ def plot_fields_temporal_to_gif(
             images.append(imageio.imread(buf))
             buf.close()
             plt.close(fig)
+
+    #imageio.mimsave(filename, images, fps=5)
 
     # Create and save the GIF with loop=0 for infinite loop
     imageio.mimsave(filename, images, duration=0.5, loop=0)
