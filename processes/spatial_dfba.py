@@ -41,8 +41,8 @@ class SpatialDFBA(Process):
     - species_info: a list of dictionaries of species names and paths to their FBA models
     """
     defaults = {
-        'bounds': [3, 3],  # cm
-        'nbins': [3, 3],
+        'bounds': [10, 4],  # cm
+        'nbins': [10, 4],
         'depth': 0.01,
         'molecules': [
             'glucose',

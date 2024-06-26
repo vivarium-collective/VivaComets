@@ -41,8 +41,8 @@ class DiffusionField(Process):
     DiffusionField Process
     """
     defaults = {
-        'bounds': [20, 20],
-        'nbins': [20, 20],
+        'bounds': [10, 4],
+        'nbins': [10, 4],
         'depth': 1,
         'molecules': ['glucose', 'oxygen'],
         'species': ['Alteromonas', 'ecoli'],
@@ -62,7 +62,7 @@ class DiffusionField(Process):
         },
         'clamp_edges': {
             'glucose': 1.0, 
-            'acetate': 0.0,
+            'oxygen': 0.0,
         }
     }
 
