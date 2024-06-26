@@ -68,6 +68,7 @@ class DiffusionField(Process):
 
     def __init__(self, parameters=None):
         super().__init__(parameters)
+        self.parameters = self.merge_parameters(self.defaults, parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
         self.bounds = self.parameters['bounds']
@@ -94,6 +95,18 @@ class DiffusionField(Process):
         if isinstance(self.parameters['clamp_edges'], dict):
             for key in self.parameters['clamp_edges'].keys():
                 assert (key in self.molecule_ids or key in self.species_ids), f'clamp edge key {key} not in molecules or species'
+
+    def merge_parameters(self, defaults, override):
+        """Merge default parameters with override parameters."""
+        if override is None:
+            return defaults
+        result = copy.deepcopy(defaults)
+        for key, value in override.items():
+            if isinstance(value, dict) and key in result:
+                result[key].update(value)
+            else:
+                result[key] = value
+        return result
 
     def initial_state(self, config=None):
         """get initial state of the fields
@@ -254,23 +267,31 @@ class DiffusionField(Process):
 
 
 def test_fields():
-    total_time = 200
+    total_time = 20
     config = {
         'bounds': [20, 20],
         'nbins': [20, 20],
-        'molecules': ['glucose', 'oxygen'],
+        'molecules': ['glucose', 'Maltose'],
         'species': ['Alteromonas', 'ecoli'],
         'diffusion': {
-            'glucose': 6.7E-1,      # cm^2/s
-            'oxygen':  2.0E-2,      # cm^2/s
+            'glucose': 2.0E-2 ,    # cm^2/s
+            'Maltose':  6.7E-1,     # cm^2/s
             'Alteromonas': 1.0E-2, # diffusion rate for Alteromonas
-            'ecoli': 1.0E-2  
+            'ecoli': 1.0E-2        # diffusion rate for ecoli
+            
         },
         'advection': {
-            'glucose': (0.01, 0.02),  # Advection vector for glucose
-            'oxygen': (0.01, 0.01),   # Advection vector for oxygen
-            'Alteromonas': (0.01, 0.01), # advection vector for Alteromonas
-            'ecoli': (0.01, 0.01)
+            'glucose': (0.01, 0.01),     # Advection vector for glucose (x, y)
+            'Maltose': (0.01, 0.01),      # Advection vector for oxygen (x, y)
+            'Alteromonas': (0.0, -0.05), # advection vector for Alteromonas (x, y)
+            'ecoli': (0.0, -0.05)        # advection vector for ecoli (x, y)
+            
+        },
+        'clamp_edges': {
+            'glucose': 0.5, 
+            'Maltose': 0.5,
+            'Alteromonas': 0.0,
+            'ecoli': 0.0,
         }
     }
 

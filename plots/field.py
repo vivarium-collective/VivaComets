@@ -100,8 +100,6 @@ def plot_fields_temporal_to_gif(
             buf.close()
             plt.close(fig)
 
-    #imageio.mimsave(filename, images, fps=5)
-
     # Create and save the GIF with loop=0 for infinite loop
     imageio.mimsave(filename, images, duration=0.5, loop=0)
 
