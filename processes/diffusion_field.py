@@ -62,13 +62,16 @@ class DiffusionField(Process):
         },
         'clamp_edges': {
             'glucose': 1.0, 
-            'oxygen': 0.0,
+            'oxygen': 3.0,
         }
     }
 
     def __init__(self, parameters=None):
-        super().__init__(parameters)
-        self.parameters = self.merge_parameters(self.defaults, parameters)
+        merged_parameters = copy.deepcopy(self.defaults)
+        if parameters:
+            merged_parameters.update(parameters)
+        super().__init__(merged_parameters)
+
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
         self.bounds = self.parameters['bounds']
@@ -91,22 +94,12 @@ class DiffusionField(Process):
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
         self.diffusion_dt = min(diffusion_dt, self.parameters['default_diffusion_dt'])
         self.bin_volume = get_bin_volume(self.bin_size, self.parameters["depth"])
+
+        self.clamp_edges = self.parameters['clamp_edges']
         # Check that edge clamp values are provided for all molecules
         if isinstance(self.parameters['clamp_edges'], dict):
             for key in self.parameters['clamp_edges'].keys():
                 assert (key in self.molecule_ids or key in self.species_ids), f'clamp edge key {key} not in molecules or species'
-
-    def merge_parameters(self, defaults, override):
-        """Merge default parameters with override parameters."""
-        if override is None:
-            return defaults
-        result = copy.deepcopy(defaults)
-        for key, value in override.items():
-            if isinstance(value, dict) and key in result:
-                result[key].update(value)
-            else:
-                result[key] = value
-        return result
 
     def initial_state(self, config=None):
         """get initial state of the fields
