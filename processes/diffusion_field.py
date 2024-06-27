@@ -49,29 +49,24 @@ class DiffusionField(Process):
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,
         'diffusion': {
-            'glucose': 6.7E-1,
-            'oxygen': 2.0E-2,
-            'Alteromonas': 1.0E-2, 
-            'ecoli': 1.0E-2 
+            # 'glucose': 6.7E-1,
+            # 'oxygen': 2.0E-2,
+            # 'Alteromonas': 1.0E-2, 
+            # 'ecoli': 1.0E-2 
         },
         'advection': {
-            'glucose': (0.0, 0.0),
+            # 'glucose': (0.0, 0.0),
             # 'oxygen': (0.01, 0.01),
             # 'Alteromonas': (0.01, 0.01),
             # 'ecoli': (0.01, 0.01)
         },
         'clamp_edges': {
-            'glucose': 1.0, 
-            'oxygen': 3.0,
+            
         }
     }
 
     def __init__(self, parameters=None):
-        merged_parameters = copy.deepcopy(self.defaults)
-        if parameters:
-            merged_parameters.update(parameters)
-        super().__init__(merged_parameters)
-
+        super().__init__(parameters)
         self.molecule_ids = self.parameters['molecules']
         self.species_ids = self.parameters['species']
         self.bounds = self.parameters['bounds']
