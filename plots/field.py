@@ -282,3 +282,61 @@ def plot_fields_temporal(
     fig.savefig(fig_path, bbox_inches='tight')
     plt.close()
     return fig
+
+
+
+# plotting function
+def plot_dfba_bin_data(data, x, y):
+    time_points = data["time"]
+    ecoli_growth = [data["species"]["ecoli"][t][x][y] for t in range(len(time_points))]
+    Thermotoga_growth = [data["species"]["Thermotoga"][t][x][y] for t in range(len(time_points))]
+    external_Maltose = [data["fields"]["Maltose"][t][x][y] for t in range(len(time_points))]
+    external_glucose = [data["fields"]["glucose"][t][x][y] for t in range(len(time_points))]
+    external_acetate = [data["fields"]["acetate"][t][x][y] for t in range(len(time_points))]
+    
+    # Plotting
+    plt.figure(figsize=(15, 10))
+    
+    # Growth of E. coli over time
+    plt.subplot(3, 2, 1)
+    plt.plot(time_points, ecoli_growth, label='E. coli Biomass', color='b')
+    plt.xlabel('Time')
+    plt.ylabel('E. coli Biomass')
+    plt.title('Growth of E. coli over Time')
+    plt.legend()
+    
+    # Growth of Thermotoga over time
+    plt.subplot(3, 2, 2)
+    plt.plot(time_points, Thermotoga_growth, label='Thermotoga Biomass', color='g')
+    plt.xlabel('Time')
+    plt.ylabel('Thermotoga Biomass')
+    plt.title('Growth of Thermotoga over Time')
+    plt.legend()
+    
+    # Usage of glucose over time
+    plt.subplot(3, 2, 3)
+    plt.plot(time_points, external_glucose, label='External Glucose', color='r')
+    plt.xlabel('Time')
+    plt.ylabel('External Glucose')
+    plt.title('Glucose Usage')
+    plt.legend()
+
+     # Usage of Maltose over time
+    plt.subplot(3, 2, 4)
+    plt.plot(time_points, external_Maltose, label='External Maltose', color='r')
+    plt.xlabel('Time')
+    plt.ylabel('External Maltose')
+    plt.title('Maltose Usage')
+    plt.legend()
+    
+    # Usage of acetate over time
+    plt.subplot(3, 2, 5)
+    plt.plot(time_points, external_acetate, label='External Acetate', color='m')
+    plt.xlabel('Time')
+    plt.ylabel('External Acetate')
+    plt.title('Acetate in the environment')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.show()
+
