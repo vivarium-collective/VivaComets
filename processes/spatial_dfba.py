@@ -11,6 +11,7 @@ from processes.diffusion_field import get_bin_volume
 from cobra.io import read_sbml_model
 import logging
 import warnings
+from plots.field import plot_fields_temporal_to_gif, plot_dfba_bin_data
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="cobra.util.solver")
@@ -370,24 +371,20 @@ def test_spatial_dfba(
     fields = data["fields"]
     fields.update(data["species"])
 
-    # # plots
-    # plot_objective_flux(
-    #     data,
-    #     time_points=desired_time_points,
-    #     species_names=[species['name'] for species in config['species_info']],
-    #     out_dir='./out',
-    #     filename='objective_flux_plot'
-    # )
+    #plots
+    plot_dfba_bin_data(data, x=1, y=1)
+    actual_time_list = [i for i in range(total_time+1)]
+    skip_steps = 1
+    desired_time_list = [i for i in range(0, total_time+1, skip_steps)]
 
-    # plot_fields_temporal(
-    #     fields_data=data['fields'], 
-    #     desired_time_points=desired_time_points, 
-    #     actual_time_points=actual_time_points,
-    #     plot_fields=["glucose", "oxygen", "ecoli"],
-    #     molecule_colormaps={"glucose": "Blues", "oxygen": "Greens", "ecoli": "Purples"},
-    #     out_dir='./out',
-    #     filename='spatial_dfba_test',
-    # )
+    plot_fields_temporal_to_gif(
+        data['fields'], 
+        data['species'],
+        desired_time_points=desired_time_list, 
+        actual_time_points=actual_time_list, 
+        # filename='dfba_output.gif'
+    )
+    
 
 if __name__ == '__main__':
     test_spatial_dfba()
