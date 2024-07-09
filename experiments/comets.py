@@ -158,68 +158,6 @@ def run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initi
     
     return data
 
-# def run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initial_state_config):
-
-#     # create the two processes
-#     diffusion_field = DiffusionField(parameters=diffusion_field_params)
-#     spatial_dfba = SpatialDFBA(parameters=spatial_dfba_params)
-
-#     # set the initial state for diffusion field
-#     initial_state_diffusion_field = diffusion_field.initial_state({'random': 1.0})
-
-#     # set the initial state for spatial dfba
-#     initial_state_spatial_dfba = spatial_dfba.initial_state(initial_state_config)
-
-#     # Merge the initial states
-#     initial_state = {
-#         'fields': initial_state_diffusion_field['fields'],
-#         'species': initial_state_spatial_dfba['species'],
-#     }
-
-#     # make the composite simulation and run it
-#     sim = Engine(
-#         processes={
-#             'diffusion_process': diffusion_field,
-#             'fba_process': spatial_dfba
-#         },
-#         topology={
-#             'diffusion_process': {
-#                 'fields': ('fields',),
-#                 'species': ('species',),
-#                 'dimensions': ('dimensions',),
-#             },
-#             'fba_process': {
-#                 'fields': ('fields',),
-#                 'species': ('species',),
-#                 'exchange_fluxes': ('exchange_fluxes',),
-#                 'dimensions': ('dimensions',),
-#             }
-#         },
-#         initial_state=initial_state
-#     )
-#     sim.update(comets_config['total_time'])
-
-#     # retrieve the results and plot them
-#     data = sim.emitter.get_timeseries()
-#     desired_time_points = [1, 3, comets_config['total_time'] - 1]
-
-#     plot_objective_flux(
-#         data,
-#         time_points=desired_time_points,
-#         species_names=[species['name'] for species in species_info],
-#         out_dir='./out',
-#         filename='Comets_objective_flux_plot'
-#     )
-
-#     plot_fields_temporal(
-#         data['fields'],
-#         desired_time_points=desired_time_points,
-#         actual_time_points=data['time'],
-#         plot_fields=["glucose", "oxygen", "ecoli", "Alteromonas"],
-#         molecule_colormaps={"glucose": "Blues", "oxygen": "Greens", "ecoli": "Purples", "Alteromonas": "Oranges"},
-#         filename='comets_fields',
-#     )
-
 
 if __name__ == '__main__':
     run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initial_field_config, initial_species_config)

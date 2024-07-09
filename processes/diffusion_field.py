@@ -44,8 +44,8 @@ class DiffusionField(Process):
         'bounds': [10, 4],
         'nbins': [10, 4],
         'depth': 1,
-        'molecules': ['glucose', 'oxygen'],
-        'species': ['Alteromonas', 'ecoli'],
+        'molecules':[],#['glucose', 'oxygen'],
+        'species':[] ,#['Alteromonas', 'ecoli'],
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,
         'diffusion': {
@@ -145,16 +145,15 @@ class DiffusionField(Process):
             elif 'uniform' in config:
                 uniform_config = config['uniform']
                 if isinstance(uniform_config, dict):
-                    # If config['uniform'] is a dictionary, get the value for the current species
                     value = uniform_config.get(spec, 1)
                 else:
-                    # If config['uniform'] is directly a float (or int), use it as the uniform value for all species
                     value = uniform_config
                 field = np.ones(shape) * value
             else:
                 field = np.ones(shape)
             species[spec] = field
         return {'fields': fields, 'species': species}
+
 
 
     def ports_schema(self):
