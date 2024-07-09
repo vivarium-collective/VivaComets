@@ -95,7 +95,7 @@ spatial_dfba_params = {
 
 # Initial state configuration
 initial_field_config = {
-    'random': {
+    'uniform': {
         'glucose': 200.0,
         'Maltose': 200.0,
     }}
@@ -120,7 +120,7 @@ def run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initi
     initial_species = spatial_dfba.initial_state(initial_species_config)
     
     # Merge into initial state
-    initial_state_spatial_dfba['fields']['glucose'][0, 0] = 0.0  # Set glucose to zero in one bin to see the effect
+    #initial_state_spatial_dfba['fields']['glucose'][0, 0] = 0.0  # Set glucose to zero in one bin to see the effect
     
     # Merge the initial states
     initial_state = {

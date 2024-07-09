@@ -120,11 +120,18 @@ class DiffusionField(Process):
                     max_value = random_config
                 field = np.random.rand(*shape) * max_value
             elif 'uniform' in config:
-                value = config.get('uniform', 1)
+                uniform_config = config['uniform']
+                if isinstance(uniform_config, dict):
+                    # If config['uniform'] is a dictionary, get the value for the current molecule
+                    value = uniform_config.get(mol, 1)
+                else:
+                    # If config['uniform'] is directly a float (or int), use it as the uniform value for all molecules
+                    value = uniform_config
                 field = np.ones(shape) * value
             else:
                 field = np.ones(shape)
             fields[mol] = field
+
         species = {}
         for spec in self.parameters['species']:
             shape = tuple(self.nbins)
@@ -136,12 +143,19 @@ class DiffusionField(Process):
                     max_value = random_config
                 field = np.random.rand(*shape) * max_value
             elif 'uniform' in config:
-                value = config.get('uniform', 1)
+                uniform_config = config['uniform']
+                if isinstance(uniform_config, dict):
+                    # If config['uniform'] is a dictionary, get the value for the current species
+                    value = uniform_config.get(spec, 1)
+                else:
+                    # If config['uniform'] is directly a float (or int), use it as the uniform value for all species
+                    value = uniform_config
                 field = np.ones(shape) * value
             else:
                 field = np.ones(shape)
             species[spec] = field
         return {'fields': fields, 'species': species}
+
 
     def ports_schema(self):
         schema = {
