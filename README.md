@@ -24,7 +24,7 @@ Key Features:
 
 **Dynamic Flux Balance Analysis (dFBA):** Computes the growth and metabolic rates of organisms dynamically over time, considering the spatial distribution of resources and environmental conditions.
 
-**3D Environment:** Simulates the interactions and growth of multiple species in a three-dimensional space, providing a more realistic and detailed analysis of ecological and metabolic dynamics.
+**2D Environment:** Simulates the interactions and growth of multiple species in a two-dimensional space, providing a more realistic and detailed analysis of ecological and metabolic dynamics.
 
 
 ## MIT License
