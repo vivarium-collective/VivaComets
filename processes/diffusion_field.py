@@ -83,7 +83,7 @@ class DiffusionField(Process):
         }
         self.advection_vectors = {
             mol_id: self.parameters['advection'].get(mol_id, (0, 0))
-            for mol_id in self.molecule_ids
+            for mol_id in self.molecule_ids + self.species_ids
         }
 
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)

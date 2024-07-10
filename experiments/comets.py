@@ -13,14 +13,16 @@ comets_config = {
     'time_step': 1,
     'bounds': [10, 4],
     'nbins': [10, 4],
-    'molecules': ['glucose', 'acetate', 'Maltose']
+    'molecules': ['glucose', 'acetate', 'Maltose'],
+    'species': ['Thermotoga', 'ecoli'],
 }
 
 # Parameters shared by both processes
 shared_params = {
     'bounds': comets_config['bounds'],
     'nbins': comets_config['nbins'],
-    'molecules': comets_config['molecules']
+    'molecules': comets_config['molecules'],
+    'species':comets_config['species']
 }
 
 
@@ -116,7 +118,7 @@ def run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initi
     initial_state_diffusion_field = diffusion_field.initial_state(initial_field_config)
     
     # Set the initial state for spatial dfba
-    initial_state_spatial_dfba = spatial_dfba.initial_state(initial_field_config)
+    #initial_state_spatial_dfba = spatial_dfba.initial_state(initial_field_config)
     initial_species = spatial_dfba.initial_state(initial_species_config)
     
     # Merge into initial state
