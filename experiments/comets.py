@@ -49,6 +49,7 @@ diffusion_field_params = {
         'glucose': 0.5, 
         'acetate': 0.5,
         'Maltose': 0.5,
+
     }
 }
 
@@ -102,7 +103,7 @@ initial_field_config = {
         'Maltose': 200.0,
     }}
 initial_species_config = {
-    'random': {
+    'uniform': {
         'species': {
             'ecoli': 0.5,
             'Thermotoga': 0.5
