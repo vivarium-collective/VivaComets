@@ -31,7 +31,6 @@ def get_bin_site(location, n_bins, bounds):
 def get_bin_volume(bin_size, depth=1):
     dimensions = bin_size + [depth]
     volume = np.prod(dimensions)
-    # print(f'Volume of bin is {volume}, dimensions are {dimensions}')
     assert volume > 0, f'Volume of bin is {volume}'
     return volume
 
@@ -44,15 +43,15 @@ class DiffusionField(Process):
         'bounds': [10, 4],
         'nbins': [10, 4],
         'depth': 1,
-        'molecules':[],#['glucose', 'oxygen'],
-        'species':[] ,#['Alteromonas', 'ecoli'],
+        'molecules': [],  # ['glucose', 'oxygen'],
+        'species': [],  # ['Alteromonas', 'ecoli'],
         'default_diffusion_dt': 0.001,
         'default_diffusion_rate': 2E-5,
         'diffusion': {
             # 'glucose': 6.7E-1,
             # 'oxygen': 2.0E-2,
-            # 'Alteromonas': 1.0E-2, 
-            # 'ecoli': 1.0E-2 
+            # 'Alteromonas': 1.0E-2,
+            # 'ecoli': 1.0E-2
         },
         'advection': {
             # 'glucose': (0.0, 0.0),
@@ -61,7 +60,7 @@ class DiffusionField(Process):
             # 'ecoli': (0.01, 0.01)
         },
         'clamp_edges': {
-            
+
         }
     }
 
@@ -74,7 +73,7 @@ class DiffusionField(Process):
         self.bin_size = [b / n for b, n in zip(self.bounds, self.nbins)]
         assert len(self.bounds) == 2, "Process only supports 2D"
         diffusion_rate = self.parameters['default_diffusion_rate']
-        dx, dy = self.bin_size  
+        dx, dy = self.bin_size
         dx2_dy2 = get_bin_volume(self.bin_size)
         self.diffusion_rate = diffusion_rate / dx2_dy2
         self.molecule_specific_diffusion = {
@@ -83,7 +82,7 @@ class DiffusionField(Process):
         }
         self.advection_vectors = {
             mol_id: self.parameters['advection'].get(mol_id, (0, 0))
-            for mol_id in self.molecule_ids # + self.species_ids
+            for mol_id in self.molecule_ids + self.species_ids
         }
 
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
@@ -154,8 +153,6 @@ class DiffusionField(Process):
             species[spec] = field
         return {'fields': fields, 'species': species}
 
-
-
     def ports_schema(self):
         schema = {
             'species': {},
@@ -199,18 +196,19 @@ class DiffusionField(Process):
         combined_dict = {**states['fields'], **states['species']}
         combined_new = copy.deepcopy(combined_dict)
 
-        # update the fields
+        # update the fields and species
         for mol_id, field in combined_dict.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
 
-            clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
+            # Apply diffusion and advection
+            if np.var(field) > 0:  # If field is not uniform
+                clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
+                field = self.diffuse(field, timestep, diffusion_rate, advection_vector, constant_value=clamp_value)
 
-            combined_new[mol_id] = self.diffuse(
-                field, timestep,
-                diffusion_rate, advection_vector,
-                constant_value=clamp_value,
-                do_diffusion=np.var(field) > 0)  # Perform diffusion only if field is not uniform
+            # Always apply advection regardless of field variance
+            field = self.advect(field, timestep, advection_vector)
+            combined_new[mol_id] = field
 
         # get deltas for fields and species
         delta_fields = {
@@ -228,6 +226,45 @@ class DiffusionField(Process):
             'species': delta_species
         }
 
+    # def advect(self, field, timestep, advection_vector):
+    #     gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
+    #     gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
+
+    #     t = 0.0
+    #     dt = timestep
+    #     while t < timestep:
+    #         grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
+    #         grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
+
+    #         field -= dt * (grad_x + grad_y)
+    #         t += dt
+    #     return field
+    
+
+    def advect(self, field, timestep, advection_vector, constant_value=None):
+        if field.ndim == 2:    
+            gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
+            gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
+            
+        else:
+            raise ValueError('Field must be 1D, 2D, or 3D')
+        t = 0.0
+        dt = min(timestep, self.diffusion_dt)
+        while t < timestep:
+            if constant_value:
+                grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
+            else:
+                grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
+
+            field -= dt * (grad_x + grad_y)
+            t += dt
+        return field
+    
+
+
+
     def get_bin_site(self, location):
         return get_bin_site(
             [loc for loc in location],
@@ -240,7 +277,7 @@ class DiffusionField(Process):
     def random_field(self):
         return np.random.rand(*self.nbins)
 
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector, constant_value=None, do_diffusion=True):
+    def diffuse(self, field, timestep, diffusion_rate, advection_vector, constant_value=None):
         if field.ndim == 2:    
             laplacian_kernel = np.array([[0,  1, 0],
                                          [1, -4, 1],
@@ -253,23 +290,19 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            if do_diffusion:
-                if constant_value:
-                    laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
-                else:
-                    laplacian = convolve(field, laplacian_kernel, mode='nearest') * diffusion_rate
-                field += dt * laplacian
-
             if constant_value:
+                laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
                 grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
                 grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
             else:
+                laplacian = convolve(field, laplacian_kernel, mode='nearest') * diffusion_rate
                 grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
                 grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
 
-            field -= dt * (grad_x + grad_y)
+            field += dt * (laplacian - grad_x - grad_y)
             t += dt
         return field
+
 
 
 def test_fields():
@@ -290,7 +323,7 @@ def test_fields():
             'glucose': (0.01, 0.01),     # Advection vector for glucose (x, y)
             'Maltose': (0.01, 0.01),      # Advection vector for oxygen (x, y)
             'Alteromonas': (0.0, -0.05), # advection vector for Alteromonas (x, y)
-            'ecoli': (0.0, -0.05)        # advection vector for ecoli (x, y)
+            'ecoli': (0.0, -0.05)        # advection vector for ecoli
             
         },
         'clamp_edges': {
