@@ -80,10 +80,12 @@ class DiffusionField(Process):
             mol_id: diff_rate / dx2_dy2
             for mol_id, diff_rate in self.parameters['diffusion'].items()
         }
+        
         self.advection_vectors = {
             mol_id: self.parameters['advection'].get(mol_id, (0, 0))
             for mol_id in self.molecule_ids + self.species_ids
         }
+
 
         diffusion_dt = 0.5 * min(dx**2, dy**2) / (2 * diffusion_rate)
         self.diffusion_dt = min(diffusion_dt, self.parameters['default_diffusion_dt'])
@@ -200,7 +202,7 @@ class DiffusionField(Process):
         for mol_id, field in combined_dict.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
-
+            
             # Apply diffusion and advection
             if np.var(field) > 0:  # If field is not uniform
                 clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
@@ -226,43 +228,18 @@ class DiffusionField(Process):
             'species': delta_species
         }
 
-    # def advect(self, field, timestep, advection_vector):
-    #     gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
-    #     gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
-
-    #     t = 0.0
-    #     dt = timestep
-    #     while t < timestep:
-    #         grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
-    #         grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
-
-    #         field -= dt * (grad_x + grad_y)
-    #         t += dt
-    #     return field
-    
-
-    def advect(self, field, timestep, advection_vector, constant_value=None):
-        if field.ndim == 2:    
-            gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
-            gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
-            
-        else:
-            raise ValueError('Field must be 1D, 2D, or 3D')
+    def advect(self, field, timestep, advection_vector):
+        gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
+        gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            if constant_value:
-                grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
-                grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
-            else:
-                grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
-                grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
+            grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
+            grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
 
             field -= dt * (grad_x + grad_y)
             t += dt
         return field
-    
-
 
 
     def get_bin_site(self, location):
