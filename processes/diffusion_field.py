@@ -201,14 +201,14 @@ class DiffusionField(Process):
         # update the fields and species
         for mol_id, field in combined_dict.items():
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
-            advection_vector = self.parameters['advection'].get(mol_id, (0, 0))
-            
-            # Apply diffusion and advection
-            if np.var(field) > 0:  # If field is not uniform
-                clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
-                field = self.diffuse(field, timestep, diffusion_rate, advection_vector, constant_value=clamp_value)
+            advection_vector = self.advection_vectors.get(mol_id, (0, 0))
 
-            # Always apply advection regardless of field variance
+            # Apply diffusion if the field is not uniform
+            if np.var(field) > 0:
+                clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
+                field = self.diffuse(field, timestep, diffusion_rate, constant_value=clamp_value)
+
+            # Always apply advection
             field = self.advect(field, timestep, advection_vector)
             combined_new[mol_id] = field
 
@@ -228,6 +228,26 @@ class DiffusionField(Process):
             'species': delta_species
         }
 
+    def diffuse(self, field, timestep, diffusion_rate, constant_value=None):
+        if field.ndim == 2:    
+            laplacian_kernel = np.array([[0,  1, 0],
+                                         [1, -4, 1],
+                                         [0,  1, 0]])
+        else:
+            raise ValueError('Field must be 1D, 2D, or 3D')
+
+        t = 0.0
+        dt = min(timestep, self.diffusion_dt)
+        while t < timestep:
+            if constant_value:
+                laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
+            else:
+                laplacian = convolve(field, laplacian_kernel, mode='nearest') * diffusion_rate
+
+            field += dt * laplacian
+            t += dt
+        return field
+
     def advect(self, field, timestep, advection_vector):
         gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
         gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
@@ -241,7 +261,6 @@ class DiffusionField(Process):
             t += dt
         return field
 
-
     def get_bin_site(self, location):
         return get_bin_site(
             [loc for loc in location],
@@ -253,34 +272,6 @@ class DiffusionField(Process):
 
     def random_field(self):
         return np.random.rand(*self.nbins)
-
-    def diffuse(self, field, timestep, diffusion_rate, advection_vector, constant_value=None):
-        if field.ndim == 2:    
-            laplacian_kernel = np.array([[0,  1, 0],
-                                         [1, -4, 1],
-                                         [0,  1, 0]])
-            gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
-            gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
-            
-        else:
-            raise ValueError('Field must be 1D, 2D, or 3D')
-        t = 0.0
-        dt = min(timestep, self.diffusion_dt)
-        while t < timestep:
-            if constant_value:
-                laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
-                grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
-                grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
-            else:
-                laplacian = convolve(field, laplacian_kernel, mode='nearest') * diffusion_rate
-                grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
-                grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
-
-            field += dt * (laplacian - grad_x - grad_y)
-            t += dt
-        return field
-
-
 
 def test_fields():
     total_time = 20

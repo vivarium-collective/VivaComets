@@ -119,6 +119,11 @@ def run_comets(comets_config, diffusion_field_params, spatial_dfba_params, initi
     
     # Set the initial state for spatial dfba
     initial_species = spatial_dfba.initial_state(initial_species_config)
+
+    # make top row 0 for the species
+    for sid, array in initial_species['species'].items():
+        initial_species['species'][sid][0,:] = 0
+
     
     # Merge the initial states
     initial_state = {
