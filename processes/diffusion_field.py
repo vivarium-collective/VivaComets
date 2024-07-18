@@ -144,7 +144,7 @@ class DiffusionField(Process):
                     max_value = random_config
                 field = np.random.rand(*shape) * max_value
             elif 'uniform' in config:
-                uniform_config = config['uniform']
+                uniform_config is config['uniform']
                 if isinstance(uniform_config, dict):
                     value = uniform_config.get(spec, 1)
                 else:
@@ -227,6 +227,12 @@ class DiffusionField(Process):
             if sid in states['species'] and np.var(array) == 0:
                 combined_new[sid][0, :] = 0
                 delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
+
+        # Ensure the top row of the molecules field remains zero if it becomes uniform
+        for mid, array in combined_new.items():
+            if mid in states['fields'] and np.var(array) == 0:
+                combined_new[mid][0, :] = 0
+                delta_fields[mid][0, :] = 0 - states['fields'][mid][0, :]
 
         # return the update
         return {
