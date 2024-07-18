@@ -222,6 +222,12 @@ class DiffusionField(Process):
             for spec_id, field in states['species'].items()
         }
 
+        # Ensure the top row of the species field remains zero if it becomes uniform
+        for sid, array in combined_new.items():
+            if sid in states['species'] and np.var(array) == 0:
+                combined_new[sid][0, :] = 0
+                delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
+
         # return the update
         return {
             'fields': delta_fields,
