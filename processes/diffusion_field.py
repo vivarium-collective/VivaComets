@@ -144,7 +144,7 @@ class DiffusionField(Process):
                     max_value = random_config
                 field = np.random.rand(*shape) * max_value
             elif 'uniform' in config:
-                uniform_config is config['uniform']
+                uniform_config = config['uniform']
                 if isinstance(uniform_config, dict):
                     value = uniform_config.get(spec, 1)
                 else:
