@@ -225,18 +225,18 @@ class DiffusionField(Process):
         }
 
         # Ensure the top row of the species field remains zero if it becomes uniform
-        # for sid, array in combined_new.items():
-        #     if sid in states['species'] and np.var(array) == 0:
-        #         combined_new[sid][0, :] = 0
-        #         delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
+        for sid, array in combined_new.items():
+            if sid in states['species'] and np.var(array) == 0:
+                combined_new[sid][0, :] = 0
+                delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
 
-        # # Ensure the top row of the molecules field remains zero if it becomes uniform
-        # for mid, array in combined_new.items():
-        #     if mid in states['fields'] and np.var(array) == 0:
-        #         combined_new[mid][0, :] = 0
-        #         delta_fields[mid][0, :] = 0 - states['fields'][mid][0, :]
+        # Ensure the top row of the molecules field remains zero if it becomes uniform
+        for mid, array in combined_new.items():
+            if mid in states['fields'] and np.var(array) == 0:
+                combined_new[mid][0, :] = 0
+                delta_fields[mid][0, :] = 0 - states['fields'][mid][0, :]
 
-        # return the update
+        #return the update
         return {
             'fields': delta_fields,
             'species': delta_species
@@ -253,7 +253,7 @@ class DiffusionField(Process):
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            if constant_value:
+            if constant_value is not None:
                 laplacian = convolve(field, laplacian_kernel, mode='constant', cval=constant_value) * diffusion_rate
             else:
                 laplacian = convolve(field, laplacian_kernel, mode='nearest') * diffusion_rate
@@ -270,8 +270,8 @@ class DiffusionField(Process):
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
             if constant_value is not None:
-                grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
-                grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
+                grad_x = convolve(field, gradient_x_kernel, mode='nearest', cval=constant_value) * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='nearest', cval=constant_value) * advection_vector[1]
             else:
                 grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
                 grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
