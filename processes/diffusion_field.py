@@ -203,13 +203,15 @@ class DiffusionField(Process):
             diffusion_rate = self.molecule_specific_diffusion.get(mol_id, self.diffusion_rate)
             advection_vector = self.advection_vectors.get(mol_id, (0, 0))
 
+            # Get the clamp value for the molecule
+            clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
+
             # Apply diffusion if the field is not uniform
             if np.var(field) > 0:
-                clamp_value = self.parameters['clamp_edges'].get(mol_id, 0.0)
                 field = self.diffuse(field, timestep, diffusion_rate, constant_value=clamp_value)
 
             # Always apply advection
-            field = self.advect(field, timestep, advection_vector)
+            field = self.advect(field, timestep, advection_vector, constant_value=clamp_value)
             combined_new[mol_id] = field
 
         # get deltas for fields and species
@@ -223,16 +225,16 @@ class DiffusionField(Process):
         }
 
         # Ensure the top row of the species field remains zero if it becomes uniform
-        for sid, array in combined_new.items():
-            if sid in states['species'] and np.var(array) == 0:
-                combined_new[sid][0, :] = 0
-                delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
+        # for sid, array in combined_new.items():
+        #     if sid in states['species'] and np.var(array) == 0:
+        #         combined_new[sid][0, :] = 0
+        #         delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
 
-        # Ensure the top row of the molecules field remains zero if it becomes uniform
-        for mid, array in combined_new.items():
-            if mid in states['fields'] and np.var(array) == 0:
-                combined_new[mid][0, :] = 0
-                delta_fields[mid][0, :] = 0 - states['fields'][mid][0, :]
+        # # Ensure the top row of the molecules field remains zero if it becomes uniform
+        # for mid, array in combined_new.items():
+        #     if mid in states['fields'] and np.var(array) == 0:
+        #         combined_new[mid][0, :] = 0
+        #         delta_fields[mid][0, :] = 0 - states['fields'][mid][0, :]
 
         # return the update
         return {
@@ -259,19 +261,25 @@ class DiffusionField(Process):
             field += dt * laplacian
             t += dt
         return field
-
-    def advect(self, field, timestep, advection_vector):
+    
+    
+    def advect(self, field, timestep, advection_vector, constant_value=None):
         gradient_x_kernel = np.array([[-1, 0, 1]]) / 2.0
         gradient_y_kernel = np.array([[-1], [0], [1]]) / 2.0
         t = 0.0
         dt = min(timestep, self.diffusion_dt)
         while t < timestep:
-            grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
-            grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
+            if constant_value is not None:
+                grad_x = convolve(field, gradient_x_kernel, mode='constant', cval=constant_value) * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='constant', cval=constant_value) * advection_vector[1]
+            else:
+                grad_x = convolve(field, gradient_x_kernel, mode='nearest') * advection_vector[0]
+                grad_y = convolve(field, gradient_y_kernel, mode='nearest') * advection_vector[1]
 
             field -= dt * (grad_x + grad_y)
             t += dt
         return field
+
 
     def get_bin_site(self, location):
         return get_bin_site(
@@ -307,8 +315,8 @@ def test_fields():
             
         },
         'clamp_edges': {
-            'glucose': 0.5, 
-            'Maltose': 0.5,
+            'glucose': 0, 
+            'Maltose': 0,
             'Alteromonas': 0.0,
             'ecoli': 0.0,
         }
