@@ -8,7 +8,7 @@ microbial systems in spatial environments, enhancing our understanding of dynami
 environments.
 
 ## Features
-- **Implementation of the COMETS Methodology Using Vivarium:** Utilizes the robust features of Vivarium to bring the COMETS methodology to life.
+- **Implementation of the COMETS Methodology Using Vivarium:** Utilizes the robust features of Vivarium to bring the COMETS methodology to life. The model comprehensively simulates both the environment and the microorganisms within it.
 - **Analysis and Visualization Capabilities:** Includes advanced capabilities for analyzing system interactions, with a focus on Flux Balance Analysis (FBA). This allows for the detailed examination and visualization of metabolic fluxes within the system, facilitating a deeper understanding of the underlying biological processes.
 
 ## Jupyter Notebook Demonstration
