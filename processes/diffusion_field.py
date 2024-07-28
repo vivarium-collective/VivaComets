@@ -61,6 +61,10 @@ class DiffusionField(Process):
         },
         'clamp_edges': {
 
+        },
+        'initial_edge_values': {
+            # 'glucose': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
+            # 'ecoli': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
         }
     }
 
@@ -92,11 +96,23 @@ class DiffusionField(Process):
         self.bin_volume = get_bin_volume(self.bin_size, self.parameters["depth"])
 
         self.clamp_edges = self.parameters['clamp_edges']
+        self.initial_edge_values = self.parameters['initial_edge_values']
         # Check that edge clamp values are provided for all molecules
         if isinstance(self.parameters['clamp_edges'], dict):
             for key in self.parameters['clamp_edges'].keys():
                 assert (key in self.molecule_ids or key in self.species_ids), f'clamp edge key {key} not in molecules or species'
 
+    def apply_initial_edge_values(self, field, edge_values):
+        if 'top' in edge_values:
+            field[0, :] = edge_values['top']
+        if 'bottom' in edge_values:
+            field[-1, :] = edge_values['bottom']
+        if 'left' in edge_values:
+            field[:, 0] = edge_values['left']
+        if 'right' in edge_values:
+            field[:, -1] = edge_values['right']
+        return field
+    
     def initial_state(self, config=None):
         """get initial state of the fields
         Args:
@@ -114,23 +130,21 @@ class DiffusionField(Process):
             if 'random' in config:
                 random_config = config['random']
                 if isinstance(random_config, dict):
-                    # If config['random'] is a dictionary, get the value for the current molecule
                     max_value = random_config.get(mol, 1)
                 else:
-                    # If config['random'] is directly a float (or int), use it as the max value for all molecules
                     max_value = random_config
                 field = np.random.rand(*shape) * max_value
             elif 'uniform' in config:
                 uniform_config = config['uniform']
                 if isinstance(uniform_config, dict):
-                    # If config['uniform'] is a dictionary, get the value for the current molecule
                     value = uniform_config.get(mol, 1)
                 else:
-                    # If config['uniform'] is directly a float (or int), use it as the uniform value for all molecules
                     value = uniform_config
                 field = np.ones(shape) * value
             else:
                 field = np.ones(shape)
+            if mol in self.initial_edge_values:
+                field = self.apply_initial_edge_values(field, self.initial_edge_values[mol])
             fields[mol] = field
 
         species = {}
@@ -152,6 +166,8 @@ class DiffusionField(Process):
                 field = np.ones(shape) * value
             else:
                 field = np.ones(shape)
+            if spec in self.initial_edge_values:
+                field = self.apply_initial_edge_values(field, self.initial_edge_values[spec])
             species[spec] = field
         return {'fields': fields, 'species': species}
 
@@ -319,6 +335,10 @@ def test_fields():
             'Maltose': 0,
             'Alteromonas': 0.0,
             'ecoli': 0.0,
+        },
+        'initial_edge_values': {
+            'glucose': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
+            'ecoli': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
         }
     }
 
