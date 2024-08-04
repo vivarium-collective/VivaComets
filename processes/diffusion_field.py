@@ -65,7 +65,8 @@ class DiffusionField(Process):
         'initial_edge_values': {
             # 'glucose': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
             # 'ecoli': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
-        }
+        },
+        'constant_edges': False,  # determine if initial edges remain constant during the simulation
     }
 
     def __init__(self, parameters=None):
@@ -84,7 +85,8 @@ class DiffusionField(Process):
             mol_id: diff_rate / dx2_dy2
             for mol_id, diff_rate in self.parameters['diffusion'].items()
         }
-        
+        self.constant_edges = self.parameters.get('constant_edges', False)  # Get the constant_edges parameter
+
         self.advection_vectors = {
             mol_id: self.parameters['advection'].get(mol_id, (0, 0))
             for mol_id in self.molecule_ids + self.species_ids
@@ -228,6 +230,10 @@ class DiffusionField(Process):
 
             # Always apply advection
             field = self.advect(field, timestep, advection_vector, constant_value=clamp_value)
+            # Apply constant edge values if constant_edges is True
+            if self.constant_edges and mol_id in self.initial_edge_values:
+                field = self.apply_initial_edge_values(field, self.initial_edge_values[mol_id])
+
             combined_new[mol_id] = field
 
         # get deltas for fields and species
@@ -240,17 +246,6 @@ class DiffusionField(Process):
             for spec_id, field in states['species'].items()
         }
 
-        # Ensure the top row of the species field remains zero if it becomes uniform
-        for sid, array in combined_new.items():
-            if sid in states['species'] and np.var(array) == 0:
-                combined_new[sid][0, :] = 0
-                delta_species[sid][0, :] = 0 - states['species'][sid][0, :]
-
-        # Ensure the top row of the molecules field remains zero if it becomes uniform
-        for mid, array in combined_new.items():
-            if mid in states['fields'] and np.var(array) == 0:
-                combined_new[mid][0, :] = 0
-                delta_fields[mid][0, :] = 0 - states['fields'][mid][0, :]
 
         #return the update
         return {
@@ -339,7 +334,9 @@ def test_fields():
         'initial_edge_values': {
             'glucose': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
             'ecoli': {'top': 0, 'bottom': 0, 'left': 0, 'right': 0},
-        }
+        },
+        'constant_edges': True,  # Set this to True or False for constant edges
+
     }
 
     # create the process and make a simulation
