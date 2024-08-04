@@ -71,20 +71,17 @@ class TemperatureField(Process):
                     '_emit': True
                 }
             },
-            'time': {
-                '_value': 0,
-                '_updater': 'accumulate',
+            'current_hour': {
+                '_value': self.start_hour,
+                '_updater': 'set',
                 '_emit': True
             }
         }
         return schema
 
     def next_update(self, timestep, states):
-        current_timestep = states['time']
+        current_hour = states['current_hour']
         temperature_field = states['fields']['temperature']
-
-        # Calculate the current hour in the day, iterating over 0-24 hours
-        current_hour = (self.start_hour + current_timestep) % 24
 
         # Calculate temperature variation based on time of day
         if 0 <= current_hour < 6:
@@ -103,9 +100,12 @@ class TemperatureField(Process):
             temp = calculate_temperature_at_depth(updated_surface_temperature, self.gradient, depth)
             temperature_field[row, :] = temp
 
+        # Increment the current hour, wrapping around to 0 after 23
+        next_hour = (current_hour + 1) % 24
+
         return {
             'fields': {'temperature': temperature_field},
-            'time': current_timestep + 1  # Increment the timestep
+            'current_hour': next_hour
         }
 
 def run_temperature_simulation(surface_temperature=25.0, gradient=0.03, total_time=120, start_hour=0):
@@ -125,7 +125,7 @@ def run_temperature_simulation(surface_temperature=25.0, gradient=0.03, total_ti
         processes={'temperature_process': temperature_field},
         topology={'temperature_process': {
             'fields': ('fields',),
-            'time': ('time',),
+            'current_hour': ('current_hour',),
         }}
     )
 
@@ -136,16 +136,16 @@ def run_temperature_simulation(surface_temperature=25.0, gradient=0.03, total_ti
     data = sim.emitter.get_timeseries()
     time_list = list(range(total_time + 1))
 
-    # # Plot the temperature results
-    # plot_fields_temporal(
-    #     fields_data=data['fields'],
-    #     desired_time_points=time_list,
-    #     actual_time_points=data['time'],
-    #     out_dir='./out',
-    #     filename='Temperature_test',
-    #     molecule_colormaps={'temperature': 'coolwarm'},
-    #     plot_fields=['temperature']
-    # )
+    # Plot the temperature results
+    plot_fields_temporal(
+        fields_data=data['fields'],
+        desired_time_points=time_list,
+        actual_time_points=data['current_hour'],
+        out_dir='./out',
+        filename='Temperature_test',
+        molecule_colormaps={'temperature': 'coolwarm'},
+        plot_fields=['temperature']
+    )
 
 if __name__ == '__main__':
     run_temperature_simulation(surface_temperature=25.0, gradient=0.03, total_time=120, start_hour=0)
