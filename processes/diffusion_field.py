@@ -212,6 +212,7 @@ class DiffusionField(Process):
         return schema
 
     def next_update(self, timestep, states):
+        print(f"Current timestep: {timestep}")
         # get the input states
         combined_dict = {**states['fields'], **states['species']}
         combined_new = copy.deepcopy(combined_dict)
